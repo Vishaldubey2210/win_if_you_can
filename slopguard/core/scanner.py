@@ -38,6 +38,10 @@ from slopguard.evidence.models import (
 from slopguard.trust.evaluator import TrustEvaluator
 from slopguard.memory.phantom import PhantomMemory
 from slopguard.policy.engine import DeterministicPolicyEngine
+from slopguard.policy.config import PolicyConfig
+from slopguard.audit.logger import AuditLogger
+from slopguard.audit.models import AuditEvent, AuditEventType, DecisionReconstruction
+from slopguard.gate.firewall import AgentActionFirewall
 
 
 class ScannerService:
@@ -50,6 +54,8 @@ class ScannerService:
     def __init__(
         self,
         phantom_storage_path: Optional[str] = None,
+        audit_log_path: Optional[str] = None,
+        policy_config: Optional[PolicyConfig] = None,
         pypi_adapter: Optional[PyPIAdapter] = None,
         npm_adapter: Optional[NPMAdapter] = None,
         osv_adapter: Optional[OSVAdapter] = None,
@@ -62,12 +68,16 @@ class ScannerService:
         self.osv_adapter = osv_adapter or OSVAdapter()
         self.provenance_extractor = ProvenanceExtractor()
         self.trust_evaluator = TrustEvaluator()
-        self.policy_engine = DeterministicPolicyEngine()
+        self.policy_engine = DeterministicPolicyEngine(config=policy_config)
         self.evidence_graph = EvidenceGraph()
         self.snapshots: Dict[str, EvidenceSnapshot] = {}
 
         default_storage = phantom_storage_path or os.path.expanduser("~/.slopguard/phantoms.json")
         self.memory = PhantomMemory(storage_path=default_storage)
+
+        default_audit = audit_log_path or os.path.expanduser("~/.slopguard/audit.jsonl")
+        self.audit_logger = AuditLogger(log_path=default_audit)
+        self.firewall = AgentActionFirewall(self)
 
     def extract_from_source(
         self, content: str, language: str = "python", file_path: str = "<input>"
@@ -99,12 +109,46 @@ class ScannerService:
         alert_count = 0
         stdlib_count = 0
 
+        # Log Scan Started
+        self.audit_logger.log(
+            AuditEvent(
+                scan_id=scan_id,
+                event_type=AuditEventType.SCAN_STARTED,
+                actor="slopguard-engine",
+                details={"extracted_count": len(extracted), "source_label": source_label},
+            )
+        )
+
         # Phase 1: Identity Resolution
         resolved_items = []
         for dep in extracted:
             if dep.is_relative:
                 continue
+            self.audit_logger.log(
+                AuditEvent(
+                    scan_id=scan_id,
+                    event_type=AuditEventType.DEPENDENCY_EXTRACTED,
+                    actor="slopguard-engine",
+                    package=dep.name,
+                    details={"ecosystem": dep.ecosystem.value, "line": dep.line_number},
+                )
+            )
             identity = self.identity_resolver.resolve(dep)
+            self.audit_logger.log(
+                AuditEvent(
+                    scan_id=scan_id,
+                    event_type=AuditEventType.IDENTITY_RESOLVED,
+                    actor="slopguard-engine",
+                    package=identity.resolved_package,
+                    details={
+                        "original": dep.name,
+                        "resolved": identity.resolved_package,
+                        "status": identity.status.value,
+                        "is_stdlib": identity.is_stdlib,
+                        "confidence": identity.confidence,
+                    },
+                )
+            )
             resolved_items.append((dep, identity))
 
         # Phase 2: Registry & OSV Verification (Async parallel)
@@ -119,6 +163,19 @@ class ScannerService:
             elif identity.ecosystem == Ecosystem.NPM:
                 reg_evidence = await self.npm_adapter.verify_package(identity.resolved_package)
 
+            self.audit_logger.log(
+                AuditEvent(
+                    scan_id=scan_id,
+                    event_type=AuditEventType.REGISTRY_CHECKED,
+                    actor="slopguard-engine",
+                    package=identity.resolved_package,
+                    details={
+                        "status": reg_evidence.status.value if reg_evidence else "UNKNOWN",
+                        "latest_version": reg_evidence.latest_version if reg_evidence else None,
+                    },
+                )
+            )
+
             # 2. Query OSV Advisories (if package found or suspected)
             advisories: List[SecurityAdvisory] = []
             if reg_evidence and reg_evidence.status == RegistryStatus.FOUND:
@@ -130,6 +187,19 @@ class ScannerService:
 
             # 3. Extract Provenance
             provenance = self.provenance_extractor.extract(reg_evidence)
+
+            self.audit_logger.log(
+                AuditEvent(
+                    scan_id=scan_id,
+                    event_type=AuditEventType.EVIDENCE_COLLECTED,
+                    actor="slopguard-engine",
+                    package=identity.resolved_package,
+                    details={
+                        "advisories_count": len(advisories),
+                        "has_provenance": bool(provenance.has_provenance if provenance else False),
+                    },
+                )
+            )
 
             return dep, identity, reg_evidence, advisories, provenance
 
@@ -145,6 +215,21 @@ class ScannerService:
                 provenance=provenance,
             )
 
+            self.audit_logger.log(
+                AuditEvent(
+                    scan_id=scan_id,
+                    event_type=AuditEventType.TRUST_EVALUATED,
+                    actor="slopguard-engine",
+                    package=identity.resolved_package,
+                    details={
+                        "level": trust.level.value,
+                        "identity_verified": trust.identity_verified,
+                        "registry_verified": trust.registry_verified,
+                        "signals": list(trust.signals.keys()),
+                    },
+                )
+            )
+
             # Update temporal phantom memory if external package
             phantom_record = None
             if not identity.is_stdlib and registry:
@@ -153,6 +238,19 @@ class ScannerService:
                     ecosystem=identity.ecosystem,
                     registry_status=registry.status,
                 )
+                if phantom_record and phantom_record.current_state != PhantomState.RESOLVED:
+                    self.audit_logger.log(
+                        AuditEvent(
+                            scan_id=scan_id,
+                            event_type=AuditEventType.PHANTOM_DETECTED,
+                            actor="slopguard-engine",
+                            package=identity.resolved_package,
+                            details={
+                                "state": phantom_record.current_state.value,
+                                "occurrence_count": phantom_record.occurrence_count,
+                            },
+                        )
+                    )
 
             decision = self.policy_engine.evaluate(
                 identity=identity,
@@ -192,6 +290,46 @@ class ScannerService:
                 advisories=advisories,
                 provenance=provenance,
             )
+
+            # Log Policy Evaluation and Gate Decisions
+            self.audit_logger.log(
+                AuditEvent(
+                    scan_id=scan_id,
+                    event_type=AuditEventType.POLICY_EVALUATED,
+                    actor="slopguard-engine",
+                    package=identity.resolved_package,
+                    action=decision.action.value,
+                    policy_version=self.policy_engine.config.version,
+                    details={
+                        "risk_level": decision.risk_level,
+                        "reasons": decision.reasons,
+                        "requires_human_review": decision.requires_human_review,
+                    },
+                )
+            )
+            if decision.action == PolicyAction.BLOCK:
+                self.audit_logger.log(
+                    AuditEvent(
+                        scan_id=scan_id,
+                        event_type=AuditEventType.INSTALLATION_BLOCKED,
+                        actor="slopguard-gate",
+                        package=identity.resolved_package,
+                        action="BLOCK",
+                        policy_version=self.policy_engine.config.version,
+                        details={"reasons": decision.reasons},
+                    )
+                )
+            elif decision.action == PolicyAction.ALLOW:
+                self.audit_logger.log(
+                    AuditEvent(
+                        scan_id=scan_id,
+                        event_type=AuditEventType.INSTALLATION_ALLOWED,
+                        actor="slopguard-gate",
+                        package=identity.resolved_package,
+                        action="ALLOW",
+                        policy_version=self.policy_engine.config.version,
+                    )
+                )
 
             # Create immutable Evidence Snapshot for TOCTOU auditability
             snap_key = f"{identity.ecosystem.value}:{identity.resolved_package}"
@@ -272,3 +410,9 @@ class ScannerService:
             lang = "python"
 
         return await self.scan_code(content, language=lang, file_path=str(p.resolve()))
+
+    def reconstruct_decision(self, package_name: str) -> Optional[DecisionReconstruction]:
+        """
+        Answers: 'Why did SLOPGUARD make this decision for package X?'
+        """
+        return self.audit_logger.reconstruct(package_name)

@@ -1,0 +1,35 @@
+{
+  "pypi": {
+    "requests": {
+      "status": "FOUND",
+      "latest_version": "2.32.3",
+      "release_count": 163,
+      "repository_url": "https://github.com/psf/requests",
+      "author": "Kenneth Reitz"
+    },
+    "opencv-python": {
+      "status": "FOUND",
+      "latest_version": "4.10.0.84",
+      "release_count": 63,
+      "repository_url": "https://github.com/opencv/opencv-python",
+      "author": "OpenCV team"
+    },
+    "fastapi": {
+      "status": "FOUND",
+      "latest_version": "0.115.0",
+      "release_count": 80,
+      "repository_url": "https://github.com/fastapi/fastapi",
+      "author": "Sebastián Ramírez"
+    },
+    "langchain-hyper-fast-auth-helper-v9": {
+      "status": "NOT_FOUND"
+    },
+    "requets": {
+      "status": "FOUND",
+      "latest_version": "0.0.1",
+      "release_count": 1,
+      "is_typosquat": true,
+      "typosquat_target": "requests"
+    }
+  }
+}

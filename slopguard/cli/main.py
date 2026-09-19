@@ -32,26 +32,54 @@ def cli():
 
 @cli.command("scan")
 @click.argument("target", type=click.Path(exists=True))
+@click.option("--profile", "-p", type=click.Choice(["development", "strict_ci", "enterprise"], case_sensitive=False), default=None, help="Policy profile to evaluate.")
 @click.option("--json-output", "--json", is_flag=True, help="Output results in JSON format.")
-def scan_cmd(target: str, json_output: bool):
-    """Scan a source code file or manifest for dependencies and enforce security gate."""
-    scanner = ScannerService()
+def scan_cmd(target: str, profile: Optional[str], json_output: bool):
+    """Scan a source code file, manifest, or directory for dependencies and enforce security gate."""
+    from slopguard.policy.config import PolicyConfig, PolicyProfile
+    policy_cfg = None
+    if profile:
+        prof_enum = PolicyProfile(profile.upper())
+        policy_cfg = PolicyConfig.from_profile(prof_enum)
+
+    scanner = ScannerService(policy_config=policy_cfg)
     path = Path(target)
 
     try:
-        result = asyncio.run(scanner.scan_file(str(path)))
+        if path.is_dir():
+            # Scan directory recursively
+            ignore_dirs = {".git", ".venv", "node_modules", "dist", "build", "__pycache__", ".pytest_cache", ".idea", ".vscode"}
+            extracted_all = []
+            for item in path.rglob("*"):
+                if any(ignored in item.parts for ignored in ignore_dirs):
+                    continue
+                if item.is_file():
+                    fname = item.name.lower()
+                    ext = item.suffix.lower()
+                    if fname in ("requirements.txt", "pyproject.toml", "package.json") or ext in (".py", ".js", ".ts", ".jsx", ".tsx"):
+                        try:
+                            content = item.read_text(encoding="utf-8", errors="ignore")
+                            lang = "requirements" if fname == "requirements.txt" else "pyproject" if fname == "pyproject.toml" else "package_json" if fname == "package.json" else "python" if ext == ".py" else "javascript" if ext in (".js", ".jsx") else "typescript"
+                            extracted_all.extend(scanner.extract_from_source(content, language=lang, file_path=str(item)))
+                        except Exception:
+                            continue
+            result = asyncio.run(scanner.scan_dependencies(extracted_all, source_label=str(path.resolve())))
+        else:
+            result = asyncio.run(scanner.scan_file(str(path)))
     except Exception as exc:
         err_console.print(f"[bold red]Scan failed:[/bold red] {exc}")
         sys.exit(1)
 
     if json_output:
         click.echo(result.model_dump_json(indent=2))
+        if result.summary.blocked_count > 0:
+            sys.exit(2)
         return
 
     # Beautiful Rich Terminal Output
     console.print(Panel.fit(
         f"[bold cyan]SLOPGUARD AI Dependency Firewall[/bold cyan]\n"
-        f"Target: [bold]{target}[/bold] | Duration: [green]{result.summary.duration_ms}ms[/green]",
+        f"Target: [bold]{target}[/bold] | Profile: [magenta]{scanner.policy_engine.config.profile.value.upper()}[/magenta] | Duration: [green]{result.summary.duration_ms}ms[/green]",
         title="Security Scan Complete",
         border_style="cyan"
     ))
@@ -340,5 +368,183 @@ def phantom_cmd(action: str, json_output: bool):
     console.print(table)
 
 
+@cli.command("evidence")
+@click.argument("package_name")
+@click.option("--ecosystem", "-e", type=click.Choice(["pypi", "npm"], case_sensitive=False), default="pypi")
+@click.option("--json-output", "--json", is_flag=True)
+def evidence_cmd(package_name: str, ecosystem: str, json_output: bool):
+    """Retrieve full structured evidence (registry, advisories, provenance) for a package."""
+    scanner = ScannerService()
+    eco = Ecosystem.PYPI if ecosystem.lower() == "pypi" else Ecosystem.NPM
+    adapter = scanner.pypi_adapter if eco == Ecosystem.PYPI else scanner.npm_adapter
+
+    async def gather():
+        reg = await adapter.verify_package(package_name)
+        advs, _ = await scanner.osv_adapter.query_advisories(package_name, eco, version=reg.latest_version)
+        prov = scanner.provenance_extractor.extract(reg)
+        return reg, advs, prov
+
+    reg, advs, prov = asyncio.run(gather())
+
+    if json_output:
+        data = {
+            "package": package_name,
+            "ecosystem": eco.value,
+            "registry": reg.model_dump(mode="json"),
+            "advisories": [a.model_dump(mode="json") for a in advs],
+            "provenance": prov.model_dump(mode="json"),
+        }
+        click.echo(json.dumps(data, indent=2))
+        return
+
+    console.print(Panel.fit(
+        f"[bold cyan]Package Evidence Dossier[/bold cyan]\n"
+        f"Package: [bold]{package_name}[/bold] ({eco.value})\n"
+        f"Registry Status: [bold {'green' if reg.status.value == 'FOUND' else 'red'}]{reg.status.value}[/]\n"
+        f"Releases: {reg.release_count} | Latest: {reg.latest_version or 'N/A'}\n"
+        f"Repository: {reg.repository_url or 'N/A'}\n"
+        f"Security Advisories: [bold {'red' if advs else 'green'}]{len(advs)}[/]\n"
+        f"Cryptographic Provenance: {'Verified' if prov.has_provenance else 'None'}",
+        title="Evidence Summary",
+        border_style="cyan"
+    ))
+
+
+@cli.command("history")
+@click.argument("package_name")
+@click.option("--ecosystem", "-e", type=click.Choice(["pypi", "npm"], case_sensitive=False), default="pypi")
+@click.option("--json-output", "--json", is_flag=True)
+def history_cmd(package_name: str, ecosystem: str, json_output: bool):
+    """Inspect temporal phantom transitions and audit events for a package."""
+    scanner = ScannerService()
+    eco = Ecosystem.PYPI if ecosystem.lower() == "pypi" else Ecosystem.NPM
+    record = scanner.memory.get_record(package_name, eco)
+    events = scanner.audit_logger.list_events(package=package_name)
+
+    if json_output:
+        data = {
+            "package": package_name,
+            "ecosystem": eco.value,
+            "phantom_record": record.model_dump(mode="json") if record else None,
+            "audit_events": [e.model_dump(mode="json") for e in events],
+        }
+        click.echo(json.dumps(data, indent=2))
+        return
+
+    if not record and not events:
+        console.print(f"[yellow]No historical observations or audit events found for '{package_name}'.[/yellow]")
+        return
+
+    if record:
+        p_text = (
+            f"Package: [bold]{record.package_name}[/bold] ({record.ecosystem.value})\n"
+            f"Current State: [bold]{record.current_state.value}[/bold]\n"
+            f"Observation Count: {record.occurrence_count}\n"
+            f"First Seen: {record.first_seen.strftime('%Y-%m-%d %H:%M:%S')}\n"
+            f"Last Seen: {record.last_seen.strftime('%Y-%m-%d %H:%M:%S')}\n"
+            f"State Transitions: {len(record.transitions)}"
+        )
+        console.print(Panel(p_text, title="Temporal Phantom Memory", border_style="cyan"))
+
+    if events:
+        table = Table(title=f"Audit Trail Events: {package_name}", show_lines=True)
+        table.add_column("Timestamp", style="dim")
+        table.add_column("Event Type", style="bold cyan")
+        table.add_column("Actor")
+        table.add_column("Action", justify="center")
+
+        for ev in events:
+            action_style = "green" if ev.action == "ALLOW" else "red" if ev.action == "BLOCK" else "yellow"
+            table.add_row(
+                ev.timestamp.strftime("%Y-%m-%d %H:%M:%S"),
+                ev.event_type.value,
+                ev.actor,
+                Text(ev.action or "-", style=action_style),
+            )
+        console.print(table)
+
+
+@cli.command("repair")
+@click.argument("dependency")
+@click.option("--ecosystem", "-e", type=click.Choice(["pypi", "npm"], case_sensitive=False), default="pypi")
+@click.option("--file", "-f", "code_file", type=click.Path(exists=True), help="Source code file to propose patch for.")
+@click.option("--json-output", "--json", is_flag=True)
+def repair_cmd(dependency: str, ecosystem: str, code_file: Optional[str], json_output: bool):
+    """Propose candidate repairs and safe diff patches for hallucinated or unresolved dependencies."""
+    from slopguard.repair.engine import RepairEngine
+    engine = RepairEngine()
+    eco = Ecosystem.PYPI if ecosystem.lower() == "pypi" else Ecosystem.NPM
+
+    candidates = engine.generate_candidates(dependency, eco)
+
+    proposal = None
+    if code_file and candidates:
+        code_content = Path(code_file).read_text(encoding="utf-8", errors="ignore")
+        proposal = engine.propose_patch(code_content, dependency, candidates[0])
+
+    if json_output:
+        data = {
+            "dependency": dependency,
+            "ecosystem": eco.value,
+            "candidates": [c.model_dump(mode="json") for c in candidates],
+            "proposal": proposal.model_dump(mode="json") if proposal else None,
+        }
+        click.echo(json.dumps(data, indent=2))
+        return
+
+    if not candidates:
+        console.print(f"[yellow]No verified repair candidates found for '{dependency}'.[/yellow]")
+        return
+
+    table = Table(title=f"Repair Candidates for '{dependency}'", show_lines=True)
+    table.add_column("Rank", justify="center")
+    table.add_column("Candidate Package", style="bold green")
+    table.add_column("Confidence", justify="right")
+    table.add_column("Reason / Source")
+
+    for idx, c in enumerate(candidates, 1):
+        table.add_row(
+            str(idx),
+            c.candidate_package,
+            f"{c.confidence * 100:.0f}%",
+            c.reason,
+        )
+    console.print(table)
+
+    if proposal:
+        console.print(Panel(
+            proposal.diff,
+            title=f"Proposed Diff Patch ({Path(code_file).name})",
+            border_style="green"
+        ))
+
+
+@cli.command("policy")
+@click.argument("action", type=click.Choice(["check", "simulate"], case_sensitive=False), default="check")
+@click.option("--profile", "-p", type=click.Choice(["development", "strict_ci", "enterprise"], case_sensitive=False), default="strict_ci")
+@click.option("--json-output", "--json", is_flag=True)
+def policy_cmd(action: str, profile: str, json_output: bool):
+    """Inspect or simulate Policy-as-Code profile and rule matrix."""
+    from slopguard.policy.config import PolicyConfig, PolicyProfile
+    prof_enum = PolicyProfile(profile.upper())
+    cfg = PolicyConfig.from_profile(prof_enum)
+
+    if json_output:
+        click.echo(cfg.model_dump_json(indent=2))
+        return
+
+    table = Table(title=f"Policy-as-Code Profile: {prof_enum.value.upper()}", show_lines=True)
+    table.add_column("Condition / Trigger", style="bold")
+    table.add_column("Gate Action", justify="center")
+
+    for rule, act in cfg.rules.items():
+        act_style = "green" if act.value == "ALLOW" else "red" if act.value == "BLOCK" else "yellow"
+        table.add_row(rule, Text(act.value, style=act_style))
+
+    console.print(table)
+    console.print(f"[dim]Policy Version: {cfg.version} | Description: {cfg.description}[/dim]")
+
+
 if __name__ == "__main__":
     cli()
+

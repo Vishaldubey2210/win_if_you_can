@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import Optional
+from typing import Any, Dict, Optional
 from slopguard.core.models import (
     IdentityResolution,
     IdentityStatus,
@@ -12,14 +12,18 @@ from slopguard.core.models import (
     TrustLevel,
 )
 from slopguard.memory.phantom import PhantomRecord
+from slopguard.policy.config import PolicyConfig, get_profile_config, PolicyProfileName
 
 
 class DeterministicPolicyEngine:
     """
     Deterministic Policy-as-Code engine for SLOPGUARD.
     Evaluates concrete evidence vectors without probabilistic LLM intuition.
-    Produces ALLOW, HOLD, BLOCK, or ALERT decisions with explicit rationale.
+    Configurable via PolicyConfig and PolicyProfile presets (DEVELOPMENT, STRICT_CI, ENTERPRISE).
     """
+
+    def __init__(self, config: Optional[PolicyConfig] = None) -> None:
+        self.config = config or get_profile_config(PolicyProfileName.STRICT_CI)
 
     def evaluate(
         self,
@@ -30,7 +34,7 @@ class DeterministicPolicyEngine:
     ) -> PolicyDecision:
         reasons = []
 
-        # 1. Check Standard Library
+        # 1. Standard Library
         if identity.is_stdlib or trust.is_stdlib:
             return PolicyDecision(
                 action=PolicyAction.ALLOW,
@@ -43,7 +47,7 @@ class DeterministicPolicyEngine:
         # 2. Check Temporal Phantom State Change: APPEARED
         if phantom_record and phantom_record.current_state == PhantomState.APPEARED:
             return PolicyDecision(
-                action=PolicyAction.ALERT,
+                action=self.config.phantom_appeared_action,
                 risk_level="CRITICAL",
                 confidence=0.98,
                 requires_human_review=True,
@@ -61,7 +65,7 @@ class DeterministicPolicyEngine:
             if trust.has_typosquat_risk and trust.typosquat_details:
                 fix = f"Did you mean '{trust.typosquat_details.similar_package}'?"
             return PolicyDecision(
-                action=PolicyAction.BLOCK,
+                action=self.config.missing_package_action,
                 risk_level="HIGH",
                 confidence=1.0,
                 requires_human_review=False,
@@ -80,14 +84,21 @@ class DeterministicPolicyEngine:
             RegistryStatus.NETWORK_ERROR,
             RegistryStatus.MALFORMED_RESPONSE,
         ):
+            action = (
+                self.config.registry_429_action
+                if registry.status == RegistryStatus.RATE_LIMITED
+                else self.config.registry_timeout_action
+                if registry.status == RegistryStatus.TIMEOUT
+                else self.config.registry_5xx_action
+            )
             return PolicyDecision(
-                action=PolicyAction.HOLD,
+                action=action,
                 risk_level="MEDIUM",
                 confidence=0.90,
                 requires_human_review=True,
                 reasons=[
                     f"Registry verification failed due to {registry.status.value}: {registry.error_message}. "
-                    "Fail-safe posture enforces HOLD until registry status can be authoritatively validated."
+                    "Fail-safe posture enforces quarantine until registry status can be authoritatively validated."
                 ],
                 suggested_fix="Retry scan once registry connectivity is restored.",
             )
@@ -110,7 +121,7 @@ class DeterministicPolicyEngine:
                 )
             else:
                 return PolicyDecision(
-                    action=PolicyAction.HOLD,
+                    action=self.config.typosquat_action,
                     risk_level="HIGH",
                     confidence=trust.typosquat_details.confidence,
                     requires_human_review=True,
@@ -128,25 +139,24 @@ class DeterministicPolicyEngine:
 
         if highest_adv in ("CRITICAL", "HIGH"):
             return PolicyDecision(
-                action=PolicyAction.BLOCK,
+                action=self.config.critical_advisory_action,
                 risk_level="HIGH",
                 confidence=0.98,
                 requires_human_review=True,
                 reasons=[
                     f"Active security advisory match: {adv_count} advisory(ies) found in OSV database "
-                    f"with severity {highest_adv}. Installation blocked."
+                    f"with severity {highest_adv}."
                 ],
                 suggested_fix="Update package to a non-vulnerable patched version.",
             )
         elif highest_adv == "MEDIUM":
             return PolicyDecision(
-                action=PolicyAction.HOLD,
+                action=self.config.moderate_advisory_action,
                 risk_level="MEDIUM",
                 confidence=0.90,
                 requires_human_review=True,
                 reasons=[
-                    f"Security advisory match: {adv_count} moderate advisory(ies) found in OSV database. "
-                    "Review required before deployment."
+                    f"Security advisory match: {adv_count} moderate advisory(ies) found in OSV database."
                 ],
                 suggested_fix="Review advisory remediation notes.",
             )
@@ -154,37 +164,41 @@ class DeterministicPolicyEngine:
         # 7. Check Ambiguous Identity
         if identity.status == IdentityStatus.AMBIGUOUS:
             return PolicyDecision(
-                action=PolicyAction.HOLD,
+                action=self.config.unresolved_identity_action,
                 risk_level="MEDIUM",
                 confidence=0.50,
                 requires_human_review=True,
                 reasons=["Package identity is ambiguous or could not be mapped to a known ecosystem."],
             )
 
-        # 8. Check Brand New Package with Weak History
+        # 8. Check Release Integrity & Age
         if registry and registry.status == RegistryStatus.FOUND:
-            if registry.release_count == 0:
+            if registry.release_count < self.config.min_release_count_required:
                 return PolicyDecision(
-                    action=PolicyAction.HOLD,
-                    risk_level="MEDIUM",
-                    confidence=0.85,
-                    requires_human_review=True,
-                    reasons=["Package exists on registry but contains 0 published releases."],
-                )
-
-            # Check new package (< 14 days) with single release & no repo linkage
-            if rel_signals.get("is_new_package") and registry.release_count <= 1 and not rel_signals.get("has_repository"):
-                return PolicyDecision(
-                    action=PolicyAction.HOLD,
+                    action=self.config.weak_provenance_action,
                     risk_level="MEDIUM",
                     confidence=0.85,
                     requires_human_review=True,
                     reasons=[
-                        f"Newly published package ({rel_signals.get('package_age_days')} days old) "
-                        "with single release and no verified repository linkage."
+                        f"Package contains {registry.release_count} releases; policy requires at least {self.config.min_release_count_required}."
                     ],
-                    suggested_fix="Inspect package publisher and verify source repository.",
                 )
+
+            # Check new package with quarantine threshold
+            pkg_age = rel_signals.get("package_age_days")
+            if pkg_age is not None and pkg_age < self.config.max_package_age_days_for_quarantine:
+                if not rel_signals.get("has_repository") or not rel_signals.get("provenance_available"):
+                    return PolicyDecision(
+                        action=self.config.weak_provenance_action,
+                        risk_level="MEDIUM",
+                        confidence=0.85,
+                        requires_human_review=True,
+                        reasons=[
+                            f"Newly published package ({pkg_age} days old < {self.config.max_package_age_days_for_quarantine}d threshold) "
+                            "with unverified source repository or build provenance."
+                        ],
+                        suggested_fix="Inspect package publisher and verify source repository.",
+                    )
 
             # Validated & Trusted
             return PolicyDecision(
@@ -206,3 +220,26 @@ class DeterministicPolicyEngine:
             requires_human_review=True,
             reasons=["Inconclusive evidence; dependency held in quarantine pending review."],
         )
+
+    def simulate(
+        self,
+        identity: IdentityResolution,
+        trust: TrustAssessment,
+        registry: Optional[RegistryEvidence],
+        phantom_record: Optional[PhantomRecord] = None,
+    ) -> Dict[str, Any]:
+        """
+        Simulate policy gate execution without side effects or package installation.
+        Answers: 'What would policy do?'
+        """
+        decision = self.evaluate(identity, trust, registry, phantom_record)
+        return {
+            "policy_profile": self.config.profile.value,
+            "policy_version": self.config.version,
+            "package": identity.resolved_package,
+            "simulated_action": decision.action.value,
+            "risk_level": decision.risk_level,
+            "requires_human_review": decision.requires_human_review,
+            "reasons": decision.reasons,
+            "suggested_fix": decision.suggested_fix,
+        }
