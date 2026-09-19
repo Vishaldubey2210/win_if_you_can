@@ -1,0 +1,20 @@
+version: '3.8'
+
+services:
+  slopguard-api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: slopguard-api
+    ports:
+      - "8000:8000"
+    environment:
+      - SLOPGUARD_HOST=0.0.0.0
+      - SLOPGUARD_PORT=8000
+      - PHANTOM_STORAGE_PATH=/app/data/phantoms.json
+    volumes:
+      - slopguard-data:/app/data
+    restart: unless-stopped
+
+volumes:
+  slopguard-data:
