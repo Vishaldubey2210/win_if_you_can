@@ -74,7 +74,7 @@ def parse_ecosystem(eco_str: str) -> Ecosystem:
 
 
 class ScanRequest(BaseModel):
-    content: str = Field(description="Source code or manifest file text")
+    content: str = Field(max_length=10_000_000, description="Source code or manifest file text (max 10MB)")
     language: str = Field(
         default="python",
         description="Language or manifest format: python, javascript, typescript, requirements, pyproject, package_json",

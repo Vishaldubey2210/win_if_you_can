@@ -91,7 +91,12 @@ class OSVAdapter:
             }
         }
         if version:
-            payload["version"] = version.strip()
+            clean_v = version.strip()
+            if clean_v.startswith("=="):
+                clean_v = clean_v[2:].strip()
+            # OSV expects a concrete version string; do not pass operator ranges (e.g. >=, ~=)
+            if not any(op in clean_v for op in (">", "<", "~", "^", "!")):
+                payload["version"] = clean_v
 
         client_timeout = httpx.Timeout(self.timeout_seconds, connect=3.0)
         start_time = time.perf_counter()

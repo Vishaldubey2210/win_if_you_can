@@ -82,6 +82,9 @@ class ScannerService:
     def extract_from_source(
         self, content: str, language: str = "python", file_path: str = "<input>"
     ) -> List[ExtractedDependency]:
+        if len(content.encode("utf-8")) > 10 * 1024 * 1024:
+            raise ValueError(f"Input size ({len(content)} characters) exceeds the maximum allowed limit of 10MB.")
+
         lang = language.lower()
         if lang in ("python", "py"):
             return self.py_extractor.extract(content, file_path=file_path)
@@ -179,10 +182,13 @@ class ScannerService:
             # 2. Query OSV Advisories (if package found or suspected)
             advisories: List[SecurityAdvisory] = []
             if reg_evidence and reg_evidence.status == RegistryStatus.FOUND:
+                target_ver = reg_evidence.latest_version
+                if dep.version_constraint and dep.version_constraint.startswith("=="):
+                    target_ver = dep.version_constraint[2:].strip()
                 advisories, _ = await self.osv_adapter.query_advisories(
                     package_name=identity.resolved_package,
                     ecosystem=identity.ecosystem,
-                    version=dep.version_constraint or reg_evidence.latest_version,
+                    version=target_ver,
                 )
 
             # 3. Extract Provenance
