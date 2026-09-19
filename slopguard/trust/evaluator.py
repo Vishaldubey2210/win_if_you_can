@@ -9,13 +9,16 @@ from slopguard.core.models import (
     TrustAssessment,
     TrustLevel,
 )
+from slopguard.evidence.models import ProvenanceSignal, SecurityAdvisory
+from slopguard.trust.signals import ReleaseSignalAnalyzer
 from slopguard.trust.typosquat import TyposquatDetector
 
 
 class TrustEvaluator:
     """
-    Evaluates multi-dimensional trust signals without black-box AI scoring.
-    Combines canonical identity status, registry verification, release metrics, and typosquat detection.
+    Evaluates multi-dimensional, release-aware trust signals without black-box AI scoring.
+    Combines canonical identity status, registry verification, release metrics,
+    OSV vulnerability advisories, provenance availability, and typosquatting detection.
     """
 
     def __init__(self) -> None:
@@ -25,6 +28,8 @@ class TrustEvaluator:
         self,
         identity: IdentityResolution,
         registry: Optional[RegistryEvidence],
+        advisories: Optional[List[SecurityAdvisory]] = None,
+        provenance: Optional[ProvenanceSignal] = None,
     ) -> TrustAssessment:
         package_name = identity.resolved_package
         ecosystem = identity.ecosystem
@@ -41,7 +46,15 @@ class TrustEvaluator:
                 registry_verified=True,
                 is_stdlib=True,
                 has_typosquat_risk=False,
-                signals={"type": "standard_library"},
+                signals={
+                    "type": "standard_library",
+                    "identity": "VERIFIED",
+                    "registry": "STDLIB",
+                    "release": "SYSTEM",
+                    "repository": "OFFICIAL",
+                    "provenance": "BUILTIN",
+                    "advisory": "NONE",
+                },
                 reasons=["Package is part of the standard library runtime distribution"],
             )
 
@@ -52,7 +65,18 @@ class TrustEvaluator:
             reasons.append(f"Potential typosquat: {typosquat.reason}")
             signals["typosquat"] = typosquat.model_dump()
 
-        # 3. Registry Checks
+        # 3. Release & Temporal Signals Analysis
+        rel_signals = ReleaseSignalAnalyzer.analyze(registry, advisories, provenance)
+        signals["release_signals"] = rel_signals.model_dump()
+
+        # Build explicit dimensions
+        signals["identity"] = "VERIFIED" if identity.status in (IdentityStatus.RESOLVED, IdentityStatus.ALIASED) else "UNVERIFIED"
+        signals["registry"] = registry.status.value if registry else "UNCHECKED"
+        signals["repository"] = "LINKED" if rel_signals.has_repository else "UNLINKED"
+        signals["provenance"] = "AVAILABLE" if rel_signals.provenance_available else "UNAVAILABLE"
+        signals["advisory"] = f"{rel_signals.highest_advisory_severity}_MATCH" if rel_signals.advisories_count > 0 else "NONE"
+
+        # 4. Registry Status Checks
         registry_verified = False
         identity_verified = identity.status in (IdentityStatus.RESOLVED, IdentityStatus.ALIASED)
 
@@ -64,16 +88,26 @@ class TrustEvaluator:
             signals["release_count"] = registry.release_count
             signals["latest_version"] = registry.latest_version
             if registry.repository_url:
-                signals["repository"] = registry.repository_url
+                signals["repository_url"] = registry.repository_url
 
             if has_typosquat:
                 level = TrustLevel.SUSPICIOUS
                 reasons.append(
-                    f"Package exists on registry, but exhibits high similarity to target '{typosquat.similar_package}'"
+                    f"Package exists on registry, but exhibits suspicious similarity to target '{typosquat.similar_package}'"
+                )
+            elif rel_signals.highest_advisory_severity in ("CRITICAL", "HIGH"):
+                level = TrustLevel.SUSPICIOUS
+                reasons.append(
+                    f"Active security advisory match: {rel_signals.advisories_count} advisory(ies) found with severity {rel_signals.highest_advisory_severity}"
                 )
             elif registry.release_count == 0:
                 level = TrustLevel.REVIEW
                 reasons.append("Package exists on registry, but contains 0 releases or downloadable artifacts")
+            elif rel_signals.is_new_package and registry.release_count <= 2:
+                level = TrustLevel.REVIEW
+                reasons.append(
+                    f"Newly published package ({rel_signals.package_age_days} days old) with limited release history ({registry.release_count} release(s))"
+                )
             else:
                 level = TrustLevel.VERIFIED
                 reasons.append(
@@ -95,6 +129,11 @@ class TrustEvaluator:
         else:
             level = TrustLevel.REVIEW
             reasons.append(f"Registry returned non-standard status: {registry.status.value}")
+
+        # Add flags from release signal analyzer
+        for flag in rel_signals.flags:
+            if flag not in reasons:
+                reasons.append(flag)
 
         return TrustAssessment(
             package_name=package_name,

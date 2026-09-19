@@ -10,7 +10,13 @@ from rich.table import Table
 from rich.panel import Panel
 from rich.text import Text
 
-from slopguard.core.models import Ecosystem, PolicyAction
+from slopguard.core.models import (
+    Ecosystem,
+    EvaluatedDependency,
+    ExtractedDependency,
+    PolicyAction,
+    RegistryStatus,
+)
 from slopguard.core.scanner import ScannerService
 
 console = Console()
@@ -18,7 +24,7 @@ err_console = Console(stderr=True)
 
 
 @click.group()
-@click.version_option(version="0.1.0", prog_name="slopguard")
+@click.version_option(version="0.2.0", prog_name="slopguard")
 def cli():
     """SLOPGUARD: AI Dependency Control Plane & Supply-Chain Firewall."""
     pass
@@ -140,6 +146,159 @@ def verify_cmd(package_name: str, ecosystem: str, json_output: bool):
         title="Registry Verification Evidence",
         border_style="blue"
     ))
+
+
+@cli.command("advisories")
+@click.argument("package_name")
+@click.option("--ecosystem", "-e", type=click.Choice(["pypi", "npm"], case_sensitive=False), default="pypi")
+@click.option("--version", "-v", default=None, help="Specific version to query")
+@click.option("--json-output", "--json", is_flag=True)
+def advisories_cmd(package_name: str, ecosystem: str, version: Optional[str], json_output: bool):
+    """Query live vulnerability advisories from OSV (Open Source Vulnerabilities)."""
+    scanner = ScannerService()
+    eco = Ecosystem.PYPI if ecosystem.lower() == "pypi" else Ecosystem.NPM
+    advs, record = asyncio.run(scanner.osv_adapter.query_advisories(package_name, eco, version=version))
+
+    if json_output:
+        data = {
+            "package": package_name,
+            "ecosystem": eco.value,
+            "version": version,
+            "advisories": [a.model_dump(mode="json") for a in advs],
+            "record": record.model_dump(mode="json"),
+        }
+        click.echo(json.dumps(data, indent=2))
+        return
+
+    if not advs:
+        console.print(f"[bold green]No active advisories found on OSV for {package_name} ({eco.value}).[/bold green]")
+        return
+
+    table = Table(title=f"OSV Vulnerability Advisories: {package_name}", show_lines=True)
+    table.add_column("Advisory ID", style="bold red")
+    table.add_column("Severity", justify="center")
+    table.add_column("Summary")
+    table.add_column("Affected Versions")
+
+    for a in advs:
+        sev_color = "red" if a.severity in ("CRITICAL", "HIGH") else "yellow"
+        table.add_row(
+            a.advisory_id,
+            Text(a.severity, style=f"bold {sev_color}"),
+            a.summary,
+            ", ".join(a.affected_versions) if a.affected_versions else "All versions",
+        )
+
+    console.print(table)
+
+
+@cli.command("trust")
+@click.argument("package_name")
+@click.option("--ecosystem", "-e", type=click.Choice(["pypi", "npm"], case_sensitive=False), default="pypi")
+@click.option("--json-output", "--json", is_flag=True)
+def trust_cmd(package_name: str, ecosystem: str, json_output: bool):
+    """Inspect multi-dimensional release trust assessment and provenance."""
+    scanner = ScannerService()
+    eco = Ecosystem.PYPI if ecosystem.lower() == "pypi" else Ecosystem.NPM
+    adapter = scanner.pypi_adapter if eco == Ecosystem.PYPI else scanner.npm_adapter
+
+    dep = ExtractedDependency(name=package_name, ecosystem=eco)
+    identity = scanner.identity_resolver.resolve(dep)
+
+    async def get_trust():
+        registry = await adapter.verify_package(identity.resolved_package)
+        advs, _ = await scanner.osv_adapter.query_advisories(identity.resolved_package, eco, version=registry.latest_version)
+        prov = scanner.provenance_extractor.extract(registry)
+        return scanner.trust_evaluator.evaluate(identity, registry, advs, prov), registry
+
+    assessment, registry = asyncio.run(get_trust())
+
+    if json_output:
+        click.echo(assessment.model_dump_json(indent=2))
+        return
+
+    level_color = "green" if assessment.level.value == "VERIFIED" else "yellow" if assessment.level.value == "REVIEW" else "red"
+    panel_text = (
+        f"Target Package: [bold]{assessment.package_name}[/bold] ({assessment.ecosystem.value})\n"
+        f"Trust Level: [bold {level_color}]{assessment.level.value}[/]\n"
+        f"Identity: {'Verified' if assessment.identity_verified else 'Unverified'} | "
+        f"Registry: {'Verified' if assessment.registry_verified else 'Unverified'}\n"
+        f"Typosquat Risk: {'DETECTED' if assessment.has_typosquat_risk else 'None'}\n\n"
+        f"[bold underline]Signals:[/bold underline]\n"
+    )
+    for k, v in assessment.signals.items():
+        if k != "release_signals":
+            panel_text += f"  - {k}: {v}\n"
+
+    panel_text += f"\n[bold underline]Reasons:[/bold underline]\n"
+    for r in assessment.reasons:
+        panel_text += f"  • {r}\n"
+
+    console.print(Panel(panel_text, title="Trust Assessment", border_style="cyan"))
+
+
+@cli.command("graph")
+@click.argument("package_name")
+@click.option("--ecosystem", "-e", type=click.Choice(["pypi", "npm"], case_sensitive=False), default="pypi")
+@click.option("--json-output", "--json", is_flag=True)
+def graph_cmd(package_name: str, ecosystem: str, json_output: bool):
+    """Query Evidence Graph relationships for a package."""
+    scanner = ScannerService()
+    eco = Ecosystem.PYPI if ecosystem.lower() == "pypi" else Ecosystem.NPM
+
+    # Ingest package into graph
+    async def build():
+        adapter = scanner.pypi_adapter if eco == Ecosystem.PYPI else scanner.npm_adapter
+        dep = ExtractedDependency(name=package_name, ecosystem=eco)
+        identity = scanner.identity_resolver.resolve(dep)
+        registry = await adapter.verify_package(identity.resolved_package)
+        advs, _ = await scanner.osv_adapter.query_advisories(identity.resolved_package, eco, version=registry.latest_version)
+        prov = scanner.provenance_extractor.extract(registry)
+        trust = scanner.trust_evaluator.evaluate(identity, registry, advs, prov)
+        decision = scanner.policy_engine.evaluate(identity, trust, registry)
+        eval_dep = EvaluatedDependency(
+            extracted=dep,
+            identity=identity,
+            registry=registry,
+            trust=trust,
+            decision=decision,
+        )
+        scanner.evidence_graph.ingest_evaluated_dependency(eval_dep, advs, prov)
+
+    asyncio.run(build())
+
+    releases = scanner.evidence_graph.get_package_releases(package_name, eco)
+    repo = scanner.evidence_graph.get_package_repository(package_name, eco)
+    advs = scanner.evidence_graph.get_package_advisories(package_name, eco)
+    prov = scanner.evidence_graph.get_package_provenance(package_name, eco)
+
+    if json_output:
+        data = {
+            "package": package_name,
+            "ecosystem": eco.value,
+            "releases": [r.model_dump(mode="json") for r in releases],
+            "repository": repo.model_dump(mode="json") if repo else None,
+            "advisories": [a.model_dump(mode="json") for a in advs],
+            "provenance": prov.model_dump(mode="json") if prov else None,
+        }
+        click.echo(json.dumps(data, indent=2))
+        return
+
+    table = Table(title=f"Evidence Graph Relationships: {package_name}", show_lines=True)
+    table.add_column("Relation Edge", style="bold cyan")
+    table.add_column("Target Node")
+    table.add_column("Type", justify="center")
+
+    if repo:
+        table.add_row("HOSTED_AT", repo.label, repo.type.value)
+    for r in releases:
+        table.add_row("HAS_RELEASE", r.label, r.type.value)
+    for a in advs:
+        table.add_row("AFFECTED_BY", a.label, a.type.value)
+    if prov:
+        table.add_row("ATTESTED_BY", prov.label, prov.type.value)
+
+    console.print(table)
 
 
 @cli.command("phantom")

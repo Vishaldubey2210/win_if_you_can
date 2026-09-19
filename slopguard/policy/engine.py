@@ -92,22 +92,66 @@ class DeterministicPolicyEngine:
                 suggested_fix="Retry scan once registry connectivity is restored.",
             )
 
-        # 5. Check Typosquatting Risk
+        # 5. Check Typosquatting / Unicode Homoglyph Attack
         if trust.has_typosquat_risk and trust.typosquat_details:
             similar = trust.typosquat_details.similar_package
+            is_homoglyph = "homoglyph" in trust.typosquat_details.reason.lower()
+            if is_homoglyph:
+                return PolicyDecision(
+                    action=PolicyAction.BLOCK,
+                    risk_level="CRITICAL",
+                    confidence=1.0,
+                    requires_human_review=True,
+                    reasons=[
+                        f"CRITICAL: Unicode confusable homoglyph attack detected! Package name exhibits "
+                        f"deliberate visual spoofing of target '{similar}'."
+                    ],
+                    suggested_fix=f"Replace spoofed package with authentic '{similar}'.",
+                )
+            else:
+                return PolicyDecision(
+                    action=PolicyAction.HOLD,
+                    risk_level="HIGH",
+                    confidence=trust.typosquat_details.confidence,
+                    requires_human_review=True,
+                    reasons=[
+                        f"Potential typosquatting detected: '{identity.resolved_package}' is dangerously close to '{similar}' "
+                        f"(edit distance {trust.typosquat_details.distance}, similarity {trust.typosquat_details.similarity_ratio * 100:.1f}%)."
+                    ],
+                    suggested_fix=f"Replace '{identity.resolved_package}' with verified package '{similar}'.",
+                )
+
+        # 6. Check Active Vulnerability Advisories from OSV
+        rel_signals = trust.signals.get("release_signals", {})
+        highest_adv = rel_signals.get("highest_advisory_severity", "NONE")
+        adv_count = rel_signals.get("advisories_count", 0)
+
+        if highest_adv in ("CRITICAL", "HIGH"):
             return PolicyDecision(
-                action=PolicyAction.HOLD,
+                action=PolicyAction.BLOCK,
                 risk_level="HIGH",
-                confidence=trust.typosquat_details.confidence,
+                confidence=0.98,
                 requires_human_review=True,
                 reasons=[
-                    f"Potential typosquatting detected: '{identity.resolved_package}' is dangerously close to '{similar}' "
-                    f"(edit distance {trust.typosquat_details.distance}, similarity {trust.typosquat_details.similarity_ratio * 100:.1f}%)."
+                    f"Active security advisory match: {adv_count} advisory(ies) found in OSV database "
+                    f"with severity {highest_adv}. Installation blocked."
                 ],
-                suggested_fix=f"Replace '{identity.resolved_package}' with verified package '{similar}'.",
+                suggested_fix="Update package to a non-vulnerable patched version.",
+            )
+        elif highest_adv == "MEDIUM":
+            return PolicyDecision(
+                action=PolicyAction.HOLD,
+                risk_level="MEDIUM",
+                confidence=0.90,
+                requires_human_review=True,
+                reasons=[
+                    f"Security advisory match: {adv_count} moderate advisory(ies) found in OSV database. "
+                    "Review required before deployment."
+                ],
+                suggested_fix="Review advisory remediation notes.",
             )
 
-        # 6. Check Ambiguous Identity
+        # 7. Check Ambiguous Identity
         if identity.status == IdentityStatus.AMBIGUOUS:
             return PolicyDecision(
                 action=PolicyAction.HOLD,
@@ -117,7 +161,7 @@ class DeterministicPolicyEngine:
                 reasons=["Package identity is ambiguous or could not be mapped to a known ecosystem."],
             )
 
-        # 7. Check Verified Package with Active Releases
+        # 8. Check Brand New Package with Weak History
         if registry and registry.status == RegistryStatus.FOUND:
             if registry.release_count == 0:
                 return PolicyDecision(
@@ -126,6 +170,20 @@ class DeterministicPolicyEngine:
                     confidence=0.85,
                     requires_human_review=True,
                     reasons=["Package exists on registry but contains 0 published releases."],
+                )
+
+            # Check new package (< 14 days) with single release & no repo linkage
+            if rel_signals.get("is_new_package") and registry.release_count <= 1 and not rel_signals.get("has_repository"):
+                return PolicyDecision(
+                    action=PolicyAction.HOLD,
+                    risk_level="MEDIUM",
+                    confidence=0.85,
+                    requires_human_review=True,
+                    reasons=[
+                        f"Newly published package ({rel_signals.get('package_age_days')} days old) "
+                        "with single release and no verified repository linkage."
+                    ],
+                    suggested_fix="Inspect package publisher and verify source repository.",
                 )
 
             # Validated & Trusted

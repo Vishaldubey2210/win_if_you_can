@@ -1,8 +1,9 @@
 from __future__ import annotations
-from typing import Dict, List, Optional, Set
+import unicodedata
+from typing import Dict, List, Optional, Set, Tuple
 from slopguard.core.models import Ecosystem, TyposquatCandidate
 
-# Curated list of high-value targets commonly typosquatted
+# High-value package targets commonly typosquatted
 POPULAR_PYPI_PACKAGES: Set[str] = {
     "requests", "numpy", "pandas", "urllib3", "six", "setuptools", "wheel",
     "pip", "boto3", "botocore", "certifi", "idna", "charset-normalizer",
@@ -25,13 +26,29 @@ POPULAR_NPM_PACKAGES: Set[str] = {
     "postcss", "eslint", "prettier", "jest", "vite", "nodemon"
 }
 
+# Common visual confusable homoglyph mappings (Cyrillic, Greek, Latin fullwidth)
+HOMOGLYPH_MAP: Dict[str, str] = {
+    # Cyrillic lookalikes
+    "а": "a", "А": "A", "с": "c", "С": "C", "е": "e", "Е": "E",
+    "о": "o", "О": "O", "р": "p", "Р": "P", "ѕ": "s", "Ѕ": "S",
+    "у": "y", "У": "Y", "х": "x", "Х": "X", "і": "i", "І": "I",
+    "ј": "j", "Ј": "J", "в": "b", "В": "B", "м": "m", "М": "M",
+    "н": "h", "Н": "H", "к": "k", "К": "K", "т": "t", "Т": "T",
+    # Greek lookalikes
+    "ο": "o", "Ο": "O", "ν": "v", "Ν": "N", "ρ": "p", "Ρ": "P",
+    "τ": "t", "Τ": "T", "κ": "k", "Κ": "K", "α": "a", "Α": "A",
+    "ε": "e", "Ε": "E", "ι": "i", "Ι": "I",
+    # Dashes and separators
+    "–": "-", "—": "-", "−": "-", "‐": "-", "‑": "-", "‒": "-",
+}
+
 
 def damerau_levenshtein_distance(s1: str, s2: str) -> int:
     """
     Computes Damerau-Levenshtein distance between two strings,
     accounting for insertions, deletions, substitutions, and transpositions.
     """
-    d: Dict[tuple, int] = {}
+    d: Dict[Tuple[int, int], int] = {}
     len1, len2 = len(s1), len(s2)
 
     for i in range(-1, len1 + 1):
@@ -53,10 +70,29 @@ def damerau_levenshtein_distance(s1: str, s2: str) -> int:
     return d[(len1 - 1, len2 - 1)]
 
 
+def normalize_confusables(s: str) -> Tuple[str, bool]:
+    """
+    Normalizes string using NFKC and converts known homoglyphs into ASCII equivalents.
+    Returns: (normalized_string, had_homoglyphs)
+    """
+    normalized_unicode = unicodedata.normalize("NFKC", s)
+    result = []
+    had_homoglyphs = False
+
+    for ch in normalized_unicode:
+        if ch in HOMOGLYPH_MAP:
+            result.append(HOMOGLYPH_MAP[ch])
+            had_homoglyphs = True
+        else:
+            result.append(ch)
+
+    return "".join(result).lower(), had_homoglyphs
+
+
 class TyposquatDetector:
     """
-    Detects potential typosquatting or combative naming attempts
-    against popular open-source packages.
+    Detects potential typosquatting, punctuation spoofing, and Unicode confusable
+    homoglyphs against popular open-source packages.
     """
 
     def __init__(self) -> None:
@@ -64,24 +100,45 @@ class TyposquatDetector:
         self.npm_targets = POPULAR_NPM_PACKAGES
 
     def check(self, candidate_name: str, ecosystem: Ecosystem) -> Optional[TyposquatCandidate]:
-        name = candidate_name.strip().lower()
+        raw_name = candidate_name.strip()
         targets = self.pypi_targets if ecosystem == Ecosystem.PYPI else self.npm_targets
 
-        # If it's an exact match to a popular package, it is that package, not a squat
+        # Check 1: Unicode Confusables / Homoglyphs
+        deconfused_name, had_homoglyphs = normalize_confusables(raw_name)
+        if had_homoglyphs and deconfused_name in targets:
+            return TyposquatCandidate(
+                target_package=raw_name,
+                similar_package=deconfused_name,
+                distance=1,
+                similarity_ratio=0.99,
+                confidence=1.0,
+                reason=(
+                    f"CRITICAL: Unicode confusable homoglyph detected! Visual lookalike for popular "
+                    f"package '{deconfused_name}' using non-ASCII characters."
+                ),
+            )
+
+        name = deconfused_name
+
+        # Exact match is the real package
         if name in targets:
             return None
+
+        # Check 2: Punctuation / separator normalization (e.g. requests_toolbelt vs requests-toolbelt)
+        # Note: only flag if candidate without separators matches a root target
+        stripped_name = name.replace("-", "").replace("_", "").replace(".", "")
 
         best_match: Optional[str] = None
         min_dist: int = 999
 
         for target in targets:
-            # Skip comparisons if length difference is too large to be an accidental typo
+            # Skip comparisons if length difference is too large
             if abs(len(name) - len(target)) > 2:
                 continue
 
             dist = damerau_levenshtein_distance(name, target)
 
-            # A distance of 1 or 2 on packages with length >= 4 indicates strong similarity
+            # Distance of 1 or 2 on packages of sufficient length indicates strong similarity
             if dist in (1, 2) and min(len(name), len(target)) >= 4:
                 if dist < min_dist:
                     min_dist = dist
@@ -92,13 +149,13 @@ class TyposquatDetector:
             similarity_ratio = round(1.0 - (min_dist / max_len), 3)
             confidence = 0.95 if min_dist == 1 else 0.80
             return TyposquatCandidate(
-                target_package=name,
+                target_package=raw_name,
                 similar_package=best_match,
                 distance=min_dist,
                 similarity_ratio=similarity_ratio,
                 confidence=confidence,
                 reason=(
-                    f"Name '{name}' is within edit distance {min_dist} "
+                    f"Name '{raw_name}' is within edit distance {min_dist} "
                     f"of popular package '{best_match}' (similarity {similarity_ratio * 100:.1f}%)"
                 ),
             )
