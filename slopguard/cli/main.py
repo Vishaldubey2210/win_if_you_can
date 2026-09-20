@@ -519,6 +519,53 @@ def repair_cmd(dependency: str, ecosystem: str, code_file: Optional[str], json_o
         ))
 
 
+@cli.command("rescan")
+@click.argument("target_file", type=click.Path(exists=True))
+@click.option("--language", "-l", default="python", help="Language of the patched code.")
+@click.option("--profile", "-p", type=click.Choice(["development", "strict_ci", "enterprise"], case_sensitive=False), default="strict_ci")
+@click.option("--json-output", "--json", is_flag=True)
+def rescan_cmd(target_file: str, language: str, profile: str, json_output: bool):
+    """Rescan a patched code file and enforce the mandatory RESCAN verification gate."""
+    from slopguard.policy.config import PolicyConfig, PolicyProfile
+    prof_enum = PolicyProfile(profile.upper())
+    cfg = PolicyConfig.from_profile(prof_enum)
+    scanner = ScannerService(policy_config=cfg)
+
+    try:
+        result = asyncio.run(scanner.scan_file(target_file))
+    except Exception as exc:
+        err_console.print(f"[bold red]Rescan failed:[/bold red] {exc}")
+        sys.exit(2)
+
+    success = result.summary.blocked_count == 0
+    overall_action = PolicyAction.ALLOW if success else PolicyAction.BLOCK
+
+    if json_output:
+        data = {
+            "file": target_file,
+            "success": success,
+            "verdict": overall_action.value,
+            "blocked_count": result.summary.blocked_count,
+            "summary": result.summary.model_dump(),
+        }
+        click.echo(json.dumps(data, indent=2))
+        if not success:
+            sys.exit(2)
+        return
+
+    status_color = "green" if success else "red"
+    console.print(Panel.fit(
+        f"File: [bold]{target_file}[/bold]\n"
+        f"Rescan Verdict: [bold {status_color}]{overall_action.value}[/]\n"
+        f"Blocked Dependencies: {result.summary.blocked_count} | Allowed: {result.summary.allowed_count}\n"
+        f"Gate Status: {'[bold green]PASSED - Safe to apply[/]' if success else '[bold red]FAILED - Blocked dependencies remain[/]'}",
+        title="Patch Rescan Validation Gate",
+        border_style=status_color
+    ))
+    if not success:
+        sys.exit(2)
+
+
 @cli.command("policy")
 @click.argument("action", type=click.Choice(["check", "simulate"], case_sensitive=False), default="check")
 @click.option("--profile", "-p", type=click.Choice(["development", "strict_ci", "enterprise"], case_sensitive=False), default="strict_ci")

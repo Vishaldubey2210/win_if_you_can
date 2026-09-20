@@ -10,6 +10,10 @@ from slopguard.core.scanner import ScannerService
 
 async def run_scenario():
     scanner = ScannerService()
+    # Reset test key for clean demonstration of state transition
+    test_key = scanner.memory._key("target-phantom-corp", Ecosystem.PYPI)
+    if test_key in scanner.memory._records:
+        del scanner.memory._records[test_key]
 
     # Step 1 (T0): Package is missing (NOT_FOUND)
     scanner.pypi_adapter.verify_package = AsyncMock(
