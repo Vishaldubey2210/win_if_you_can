@@ -60,10 +60,10 @@ dev = [
 slopguard = "slopguard.cli.main:cli"
 
 [project.urls]
-Homepage = "https://github.com/slopguard/slopguard"
-Repository = "https://github.com/slopguard/slopguard"
-Documentation = "https://github.com/slopguard/slopguard#readme"
-Issues = "https://github.com/slopguard/slopguard/issues"
+Homepage = "https://github.com/Vishaldubey2210/win_if_you_can"
+Repository = "https://github.com/Vishaldubey2210/win_if_you_can"
+Documentation = "https://github.com/Vishaldubey2210/win_if_you_can#readme"
+Issues = "https://github.com/Vishaldubey2210/win_if_you_can/issues"
 
 [tool.setuptools.packages.find]
 where = ["."]

@@ -87,8 +87,8 @@ SLOPGUARD uses **PyPI Trusted Publishing** via GitHub Actions OIDC. This elimina
 1. Log into your account at [pypi.org](https://pypi.org/).
 2. Navigate to **Publishing** -> **Add a publisher**.
 3. Select **GitHub**:
-   - **Owner**: GitHub organization or username (e.g. `slopguard`)
-   - **Repository name**: `slopguard`
+   - **Owner**: `Vishaldubey2210`
+   - **Repository name**: `win_if_you_can`
    - **Workflow name**: `release.yml`
    - **Environment name**: `pypi`
    - **PyPI project name**: `slopguard-ai`

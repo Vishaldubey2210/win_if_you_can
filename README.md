@@ -167,8 +167,8 @@ Open `http://localhost:8000` in your browser to inspect:
 ### 1. Clone & Setup
 
 ```bash
-git clone https://github.com/slopguard/slopguard.git
-cd slopguard
+git clone https://github.com/Vishaldubey2210/win_if_you_can.git
+cd win_if_you_can
 
 python -m venv .venv
 # Windows:
