@@ -31,7 +31,7 @@ jobs:
 
     - name: Enforce SLOPGUARD Dependency Firewall Gate
       run: |
-        python scripts/ci_check.py . --profile strict_ci --output-json slopguard-report.json
+        python scripts/ci_check.py pyproject.toml --profile strict_ci --output-json slopguard-report.json
 
     - name: Archive Security Report
       if: always()

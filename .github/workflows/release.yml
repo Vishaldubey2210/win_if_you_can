@@ -1,0 +1,102 @@
+name: SLOPGUARD Release
+
+on:
+  push:
+    tags:
+      - 'v[0-9]+.[0-9]+.[0-9]+*'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate-and-build:
+    name: Test, Audit and Build Distributions
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install dependencies and build tools
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+
+      - name: Run Full Test Suite
+        run: |
+          pytest -v tests/
+
+      - name: Enforce SLOPGUARD Dependency Firewall Gate (Self-Scan)
+        run: |
+          python scripts/ci_check.py pyproject.toml --profile strict_ci --output-json slopguard-report.json
+
+      - name: Build sdist and wheel
+        run: |
+          python -m build
+
+      - name: Validate distribution packages with Twine
+        run: |
+          twine check dist/*
+
+      - name: Upload distribution artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: python-package-distributions
+          path: dist/
+          retention-days: 7
+
+  publish-testpypi:
+    name: Publish to TestPyPI (Manual Dispatch)
+    needs: validate-and-build
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch'
+    permissions:
+      id-token: write
+      contents: read
+    environment:
+      name: testpypi
+      url: https://test.pypi.org/p/slopguard-ai
+
+    steps:
+      - name: Download distribution packages
+        uses: actions/download-artifact@v4
+        with:
+          name: python-package-distributions
+          path: dist/
+
+      - name: Publish package to TestPyPI via Trusted Publishing (OIDC)
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          repository-url: https://test.pypi.org/legacy/
+          skip-existing: true
+
+  publish-pypi:
+    name: Publish to Official PyPI (Tagged Release)
+    needs: validate-and-build
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+    permissions:
+      id-token: write
+      contents: read
+    environment:
+      name: pypi
+      url: https://pypi.org/p/slopguard-ai
+
+    steps:
+      - name: Download distribution packages
+        uses: actions/download-artifact@v4
+        with:
+          name: python-package-distributions
+          path: dist/
+
+      - name: Publish package to PyPI via Trusted Publishing (OIDC)
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          print-hash: true

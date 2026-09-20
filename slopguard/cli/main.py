@@ -17,14 +17,26 @@ from slopguard.core.models import (
     PolicyAction,
     RegistryStatus,
 )
+from slopguard import __version__
 from slopguard.core.scanner import ScannerService
 
-console = Console()
-err_console = Console(stderr=True)
+if hasattr(sys.stdout, "reconfigure"):
+    try:
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:
+        pass
+if hasattr(sys.stderr, "reconfigure"):
+    try:
+        sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:
+        pass
+
+console = Console(legacy_windows=False)
+err_console = Console(stderr=True, legacy_windows=False)
 
 
 @click.group()
-@click.version_option(version="0.2.0", prog_name="slopguard")
+@click.version_option(version=__version__, prog_name="slopguard")
 def cli():
     """SLOPGUARD: AI Dependency Control Plane & Supply-Chain Firewall."""
     pass

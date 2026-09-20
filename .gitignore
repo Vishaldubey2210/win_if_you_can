@@ -24,6 +24,7 @@ wheels/
 .venv/
 venv/
 ENV/
+.clean_test_env/
 
 # Testing & Coverage
 .pytest_cache/
