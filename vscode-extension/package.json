@@ -1,0 +1,227 @@
+{
+  "name": "slopguard",
+  "displayName": "SLOPGUARD — AI Dependency Firewall",
+  "description": "Pre-install AI Dependency Control Plane & Supply-Chain Firewall for VS Code",
+  "version": "0.1.0",
+  "publisher": "vishaldubey2210",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Vishaldubey2210/win_if_you_can"
+  },
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Security",
+    "Linters",
+    "Programming Languages"
+  ],
+  "keywords": [
+    "security",
+    "supply-chain",
+    "dependencies",
+    "firewall",
+    "ai-agents",
+    "hallucination",
+    "typosquatting",
+    "pypi",
+    "npm"
+  ],
+  "main": "./out/extension.js",
+  "activationEvents": [
+    "onLanguage:python",
+    "onLanguage:javascript",
+    "onLanguage:typescript",
+    "onLanguage:javascriptreact",
+    "onLanguage:typescriptreact",
+    "workspaceContains:**/requirements.txt",
+    "workspaceContains:**/pyproject.toml",
+    "workspaceContains:**/package.json"
+  ],
+  "contributes": {
+    "commands": [
+      {
+        "command": "slopguard.scanWorkspace",
+        "title": "SLOPGUARD: Scan Workspace",
+        "category": "SLOPGUARD",
+        "icon": "$(shield)"
+      },
+      {
+        "command": "slopguard.scanCurrentFile",
+        "title": "SLOPGUARD: Scan Current File",
+        "category": "SLOPGUARD",
+        "icon": "$(file-code)"
+      },
+      {
+        "command": "slopguard.verifyDependency",
+        "title": "SLOPGUARD: Verify Dependency",
+        "category": "SLOPGUARD"
+      },
+      {
+        "command": "slopguard.showEvidence",
+        "title": "SLOPGUARD: Show Evidence",
+        "category": "SLOPGUARD"
+      },
+      {
+        "command": "slopguard.showDependencyHistory",
+        "title": "SLOPGUARD: Show Dependency History",
+        "category": "SLOPGUARD"
+      },
+      {
+        "command": "slopguard.findRepair",
+        "title": "SLOPGUARD: Find Repair",
+        "category": "SLOPGUARD"
+      },
+      {
+        "command": "slopguard.rescan",
+        "title": "SLOPGUARD: Rescan",
+        "category": "SLOPGUARD",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "slopguard.openDashboard",
+        "title": "SLOPGUARD: Open Dashboard",
+        "category": "SLOPGUARD",
+        "icon": "$(dashboard)"
+      },
+      {
+        "command": "slopguard.refresh",
+        "title": "SLOPGUARD: Refresh",
+        "category": "SLOPGUARD",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "slopguard.configure",
+        "title": "SLOPGUARD: Configure",
+        "category": "SLOPGUARD",
+        "icon": "$(gear)"
+      }
+    ],
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "slopguard-activitybar",
+          "title": "SLOPGUARD",
+          "icon": "media/shield.svg"
+        }
+      ]
+    },
+    "views": {
+      "slopguard-activitybar": [
+        {
+          "id": "slopguard.dependenciesView",
+          "name": "Dependency Control Plane"
+        },
+        {
+          "id": "slopguard.phantomsView",
+          "name": "Temporal Phantom Watchlist"
+        }
+      ]
+    },
+    "menus": {
+      "view/title": [
+        {
+          "command": "slopguard.scanWorkspace",
+          "when": "view == slopguard.dependenciesView",
+          "group": "navigation@1"
+        },
+        {
+          "command": "slopguard.refresh",
+          "when": "view == slopguard.dependenciesView || view == slopguard.phantomsView",
+          "group": "navigation@2"
+        },
+        {
+          "command": "slopguard.openDashboard",
+          "when": "view == slopguard.dependenciesView",
+          "group": "navigation@3"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "slopguard.showEvidence",
+          "when": "view == slopguard.dependenciesView",
+          "group": "inline@1"
+        },
+        {
+          "command": "slopguard.findRepair",
+          "when": "view == slopguard.dependenciesView",
+          "group": "inline@2"
+        }
+      ],
+      "editor/context": [
+        {
+          "command": "slopguard.scanCurrentFile",
+          "group": "1_modification@50"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "SLOPGUARD",
+      "properties": {
+        "slopguard.server.url": {
+          "type": "string",
+          "default": "http://localhost:8000",
+          "description": "Base URL of the SLOPGUARD REST API service."
+        },
+        "slopguard.cli.path": {
+          "type": "string",
+          "default": "slopguard",
+          "description": "Path or command name for the slopguard executable for CLI fallback mode."
+        },
+        "slopguard.autoScan": {
+          "type": "boolean",
+          "default": true,
+          "description": "Automatically scan dependencies when opening a workspace or relevant source files."
+        },
+        "slopguard.scanOnSave": {
+          "type": "boolean",
+          "default": true,
+          "description": "Automatically scan dependencies on saving .py, .js, .ts, or manifest files."
+        },
+        "slopguard.policyProfile": {
+          "type": "string",
+          "enum": [
+            "DEVELOPMENT",
+            "STRICT_CI",
+            "ENTERPRISE"
+          ],
+          "default": "STRICT_CI",
+          "description": "Policy profile applied to dependency gate evaluations."
+        },
+        "slopguard.exclude": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [
+            "**/node_modules/**",
+            "**/.venv/**",
+            "**/dist/**",
+            "**/build/**",
+            "**/__pycache__/**"
+          ],
+          "description": "Glob patterns to exclude from workspace dependency scanning."
+        },
+        "slopguard.openDashboardAfterScan": {
+          "type": "boolean",
+          "default": false,
+          "description": "Automatically open the web dashboard panel after a workspace scan completes."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "test": "node ./out/test/runTest.js",
+    "package": "vsce package"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.0",
+    "@types/vscode": "^1.85.0",
+    "@vscode/vsce": "^2.24.0",
+    "typescript": "^5.3.3"
+  }
+}

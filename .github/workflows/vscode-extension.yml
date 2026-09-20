@@ -1,0 +1,50 @@
+name: VS Code Extension CI
+
+on:
+  push:
+    paths:
+      - 'vscode-extension/**'
+      - '.github/workflows/vscode-extension.yml'
+  pull_request:
+    paths:
+      - 'vscode-extension/**'
+      - '.github/workflows/vscode-extension.yml'
+
+jobs:
+  build-and-test:
+    name: Build, Test & Package Extension
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+          cache-dependency-path: vscode-extension/package-lock.json
+
+      - name: Install Extension Dependencies
+        working-directory: vscode-extension
+        run: npm install
+
+      - name: Compile TypeScript
+        working-directory: vscode-extension
+        run: npm run compile
+
+      - name: Run Extension Unit Tests
+        working-directory: vscode-extension
+        run: npm test
+
+      - name: Package VSIX
+        working-directory: vscode-extension
+        run: npx @vscode/vsce package --no-git-tag-version
+
+      - name: Upload VSIX Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: slopguard-vsix
+          path: vscode-extension/*.vsix
+          retention-days: 14

@@ -162,6 +162,28 @@ Open `http://localhost:8000` in your browser to inspect:
 
 ---
 
+## VS Code Extension
+
+SLOPGUARD provides a native, industry-grade **VS Code Extension** (`vishaldubey2210.slopguard`) that brings the power of the AI Dependency Firewall directly into the editor workflow:
+
+- **Inline Diagnostics**: Real-time error/warning squigglies on hallucinated imports (`BLOCK`), incomplete trust (`HOLD`), and recognized import aliases (`ALLOW`).
+- **Quick Fix CodeActions**: 1-click replacement of blocked typosquats with verified canonical packages, triggering immediate rescans.
+- **Activity Bar & Sidebar**: Categorized Dependency TreeView and Temporal Phantom Watchlist monitoring package state changes.
+- **Evidence Dossier & Graph**: Visual evidence chains (`Import → Canonical → Registry → Trust Gate → Policy`) in a sandboxed Webview.
+- **Status Bar Monitor**: Real-time counter (`🛡 SLOPGUARD: 18 ✓ | 3 ⚠ | 2 🚫`).
+
+To install locally:
+```bash
+cd vscode-extension
+npm install
+npm run package
+code --install-extension slopguard-0.1.0.vsix
+```
+
+See [VS Code Extension Architecture](docs/vscode-extension-architecture.md) and the [Extension Documentation](vscode-extension/README.md) for details.
+
+---
+
 ## Local Development & Contributing
 
 ### 1. Clone & Setup
@@ -202,6 +224,8 @@ For complete instructions on TestPyPI and PyPI publishing, see the [PyPI & TestP
 
 ## Documentation Index
 
+- [VS Code Extension Architecture](docs/vscode-extension-architecture.md)
+- [VS Code Extension Verification Report](docs/vscode-extension-report.md)
 - [Comprehensive Final Project Report (31 Sections)](docs/final-project-report.md)
 - [Feature-by-Feature Audit Matrix](docs/final-feature-matrix.md)
 - [90-Second Demonstration Script](docs/demo-script.md)
