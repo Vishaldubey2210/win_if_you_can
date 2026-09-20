@@ -1,3 +1,4 @@
+from __future__ import annotations
 from typing import TYPE_CHECKING, Any, Dict, List, Optional
 from pydantic import BaseModel, Field
 from slopguard.core.models import Ecosystem, ExtractedDependency, PolicyAction
