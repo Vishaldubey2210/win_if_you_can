@@ -75,6 +75,7 @@ include = ["slopguard*"]
 [tool.pytest.ini_options]
 minversion = "6.0"
 addopts = "-ra -q --import-mode=importlib"
+pythonpath = ["."]
 testpaths = [
     "tests",
 ]

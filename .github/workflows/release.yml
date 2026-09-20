@@ -31,7 +31,7 @@ jobs:
 
       - name: Run Full Test Suite
         run: |
-          pytest -v tests/
+          python -m pytest tests/
 
       - name: Enforce SLOPGUARD Dependency Firewall Gate (Self-Scan)
         run: |
