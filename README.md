@@ -34,17 +34,18 @@
 10. [Temporal Phantom Memory](#10-temporal-phantom-memory)
 11. [Contextual Repair Loop](#11-contextual-repair-loop)
 12. [Policy-as-Code & Profiles](#12-policy-as-code--profiles)
-13. [VS Code Extension](#13-vs-code-extension)
-14. [Model Context Protocol (MCP) Server](#14-model-context-protocol-mcp-server)
-15. [CLI Reference](#15-cli-reference)
-16. [Web Dashboard](#16-web-dashboard)
-17. [Failure-Safe Design](#17-failure-safe-design)
-18. [Benchmark & Evaluation](#18-benchmark--evaluation)
-19. [Security Model & Limitations](#19-security-model--limitations)
-20. [Repository Structure](#20-repository-structure)
-21. [Testing & Verification](#21-testing--verification)
-22. [Installation & Quickstart](#22-installation--quickstart)
-23. [License](#23-license)
+13. [Multi-Interface Architecture & Working Flows](#13-multi-interface-architecture--working-flows)
+    - [13.1 Web Dashboard (GUI)](#131-web-dashboard-gui)
+    - [13.2 Model Context Protocol (MCP) Server](#132-model-context-protocol-mcp-server)
+    - [13.3 VS Code Extension](#133-vs-code-extension)
+    - [13.4 CLI & CI/CD Pipeline](#134-cli--cicd-pipeline)
+14. [Failure-Safe Design](#14-failure-safe-design)
+15. [Benchmark & Evaluation](#15-benchmark--evaluation)
+16. [Security Model & Limitations](#16-security-model--limitations)
+17. [Repository Structure](#17-repository-structure)
+18. [Testing & Verification](#18-testing--verification)
+19. [Installation & Quickstart](#19-installation--quickstart)
+20. [License](#20-license)
 
 ---
 
@@ -257,87 +258,280 @@ flowchart LR
 
 ---
 
-## 13. VS Code Extension
+## 13. Multi-Interface Architecture & Working Flows
 
-Install from VS Code Marketplace: **[`vishaldubey2210.slopguard`](https://marketplace.visualstudio.com/items?itemName=vishaldubey2210.slopguard)**.
+SLOPGUARD provides a unified, zero-compromise security control plane accessible through **4 synchronized interfaces**:
+1. **🖥️ Web Dashboard (Interactive GUI)** — Visual command center with interactive SVG evidence graphs, phantom watchlists, and policy simulations.
+2. **🤖 Model Context Protocol (MCP) Server** — Native AI tool interface for Claude Desktop, Cursor, Antigravity, and autonomous agents.
+3. **⚡ VS Code Extension** — Zero-latency in-editor dependency firewall with non-blocking scans and 1-click QuickFixes.
+4. **⌨️ CLI & CI/CD Engine** — High-throughput command-line runner for developer terminals, pre-commit hooks, and CI build gates.
+
+### Unified Multi-Interface Operational Map
+
+```mermaid
+flowchart TB
+    subgraph Users ["Developers & Autonomous Agents"]
+        Dev["Developer / Security Engineer"]
+        Agent["Autonomous AI Agent (Claude / Cursor)"]
+    end
+
+    subgraph Interfaces ["Multi-Interface Ingestion Layer"]
+        GUI["Web Dashboard (GUI)<br/>FastAPI Single-Page Command Center<br/>(http://localhost:8000)"]
+        MCP["MCP Server<br/>JSON-RPC over stdio / sse<br/>(9 Security Tools + Resources)"]
+        EXT["VS Code Extension<br/>Native Editor Firewall<br/>(Watcher + Diagnostics)"]
+        CLI["Developer CLI<br/>Terminal & CI/CD Gate<br/>(slopguard scan / verify)"]
+    end
+
+    subgraph CoreEngine ["SLOPGUARD Unified Control Plane (Python Core)"]
+        direction TB
+        subgraph Pipeline ["9-Stage Verification Pipeline"]
+            P1["1. EXTRACT (AST Parsers)"]
+            P2["2. IDENTITY (PEP 503 & Aliases)"]
+            P3["3. VERIFY (PyPI & npm Adapters)"]
+            P4["4. EVIDENCE (OSV & Provenance)"]
+            P5["5. TRUST (Velocity & Confusables)"]
+            P6["6. MEMORY (Temporal Watchlist)"]
+            P7["7. REPAIR (Contextual AST Diffs)"]
+            P8["8. RESCAN (Mandatory Gate)"]
+            P9["9. POLICY (Deterministic Gates)"]
+            P1 --> P2 --> P3 --> P4 --> P5 --> P6 --> P7 --> P8 --> P9
+        end
+        StateDB[("SQLite Phantom DB & Audit Log")]
+        Cache[("In-Memory Bounded LRU Cache")]
+        P6 <--> StateDB
+        P3 <--> Cache
+    end
+
+    subgraph Actions ["Enforcement & Feedback Loops"]
+        ALLOW["ALLOW (Safe & Clean)"]
+        HOLD["HOLD (Review Required)"]
+        BLOCK["BLOCK (Quarantine & Squiggle)"]
+        ALERT["ALERT (Phantom Anomaly)"]
+    end
+
+    Dev -->|Interactive Analysis| GUI
+    Dev -->|In-Editor Coding| EXT
+    Dev -->|Terminal / CI Automation| CLI
+    Agent -->|JSON-RPC Tool Calls| MCP
+
+    GUI -->|REST API /api/v1/*| CoreEngine
+    MCP -->|Direct Python Engine API| CoreEngine
+    EXT -->|REST Daemon / CLI Fallback| CoreEngine
+    CLI -->|Command Execution| CoreEngine
+
+    P9 --> ALLOW
+    P9 --> HOLD
+    P9 --> BLOCK
+    P9 --> ALERT
+
+    BLOCK -.->|Real-time Warning| EXT
+    BLOCK -.->|Interception Response| MCP
+    BLOCK -.->|Exit Code 1| CLI
+    ALERT -.->|Visual Warning| GUI
+```
+
+---
+
+### 13.1 Web Dashboard (GUI)
+
+The Web Dashboard is an interactive command center built into SLOPGUARD (`slopguard serve --port 8000`). It provides security teams, developers, and auditors with complete visual control over their supply chain.
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor Dev as Developer / Auditor
+    participant UI as Web Dashboard UI (Single-Page App)
+    participant API as FastAPI REST Gateway (/api/v1)
+    participant Engine as SLOPGUARD Engine
+    participant Graph as SVG Evidence Visualizer
+
+    Dev->>UI: Selects Scenario or Pastes Code (e.g. import requets)
+    UI->>API: POST /api/v1/scan (Source Code / Manifest)
+    API->>Engine: Run 9-Stage AST & Dependency Pipeline
+    Engine-->>API: Structured Verdicts & Evidence
+    API-->>UI: JSON Scan Response (Duration, Metrics, Actions)
+    UI->>Graph: Request Evidence Nodes (/api/v1/graph/pypi/requets)
+    Graph-->>UI: Interactive SVG Nodes (Release, Repo, Provenance, OSV)
+    Dev->>UI: Clicks Node in Evidence Graph
+    UI->>Dev: Opens Inspector Panel with Trust Scores & JSON Payload
+    Dev->>UI: Clicks "Generate Contextual Repair"
+    UI->>API: POST /api/v1/repair
+    API-->>UI: Verified Replacement ('requests') + Unified Diff Patch
+    Dev->>UI: Reviews Diff & Executes Safe Patch
+```
+
+#### Core Dashboard Capabilities:
+1. **Live Code Scanner**: Paste arbitrary Python/JS/TS code or manifest contents to inspect real-time AST extractions and gate decisions with timing metrics.
+2. **Interactive SVG Evidence Graph**: Explores package relationships across Package, Releases, GitHub Repository, Provenance Attestations, and OSV Security Advisories with interactive color-coded status badges (`FOUND`, `LINKED`, `VERIFIED`, `ALERT`).
+3. **Temporal Phantom Watchlist**: Displays real-time database records of unverified dependencies transitioning through states: `T0: NOT_FOUND` -> `T1: WATCH` -> `T2: APPEARED`.
+4. **Contextual Repair Center**: Demonstrates one-click unified diff patches computed through Levenshtein distance and known package alias dictionaries.
+5. **AI Agent Firewall Simulator**: Simulates agent-intercepted package installation commands (`pip install -r requirements.txt`) against Policy-as-Code rules.
+6. **Policy-as-Code Studio**: Toggle live enforcement profiles (`DEVELOPMENT`, `STRICT_CI`, `ENTERPRISE`) and preview verdict impacts.
+7. **Forensic Decision Reconstruction**: Detailed audit trail explaining exact rule triggers, timestamps, and confidence scores for every past gate decision.
+
+---
+
+### 13.2 Model Context Protocol (MCP) Server
+
+SLOPGUARD operates as an official **Model Context Protocol (MCP)** server (`mcp>=2.0.0`), allowing LLMs and coding agents (Claude Desktop, Cursor, Antigravity, VS Code, Windsurf, Zed) to autonomously verify packages before hallucinated dependencies can ever be executed or committed.
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor User as Developer Prompt
+    participant Agent as AI Coding Agent (Claude / Cursor)
+    participant MCP as SLOPGUARD MCP Server (stdio / sse)
+    participant Engine as Policy & Identity Engine
+    participant OSV as PyPI & OSV Registry
+
+    User->>Agent: "Build an API client with requets and cv2"
+    Note over Agent: Agent invokes pre-flight dependency check
+    Agent->>MCP: call_tool("scan_code", {code: "import requets\nimport cv2"})
+    MCP->>Engine: Run verification pipeline
+    Engine->>OSV: Query registry metadata & advisories
+    OSV-->>Engine: requets: 404 NOT_FOUND | cv2: ALIAS
+    Engine-->>MCP: {requets: BLOCK (phantom), cv2: RESOLVED (opencv-python)}
+    MCP-->>Agent: Returns structured tool response with candidate repairs
+    Note over Agent: Agent detects blocked import & self-corrects!
+    Agent->>MCP: call_tool("propose_repair", {import_name: "requets"})
+    MCP-->>Agent: {suggested_fix: "requests", confidence: 0.95}
+    Agent->>MCP: call_tool("rescan_patch", {code: "import requests\nimport cv2"})
+    MCP-->>Agent: {verdict: "ALLOW", verified: true}
+    Agent->>User: Emits verified code using 'requests' and 'opencv-python'
+```
+
+#### MCP Integration Reference:
+- **Transport Modes**: `stdio` (local subprocess for Cursor/Claude Desktop) and `sse` (remote HTTP streaming).
+- **Configuration (`.cursor/mcp.json` or `claude_desktop_config.json`)**:
+  ```json
+  {
+    "mcpServers": {
+      "slopguard": {
+        "command": "slopguard",
+        "args": ["mcp", "run", "--transport", "stdio"]
+      }
+    }
+  }
+  ```
+- **CLI Commands**:
+  - `slopguard mcp run [--transport stdio|sse] [--port 8001]`: Launch the MCP gateway.
+  - `slopguard mcp config [--client cursor|claude|all]`: Export plug-and-play JSON configs.
+  - `slopguard mcp tools`: View terminal documentation for all 9 registered MCP tools.
+
+---
+
+### 13.3 VS Code Extension
+
+The VS Code extension (**[`vishaldubey2210.slopguard`](https://marketplace.visualstudio.com/items?itemName=vishaldubey2210.slopguard)**) delivers a zero-friction, native editor experience. It guarantees that the developer or AI pair-programmer is alerted in real time with high-visibility diagnostics before running code.
 
 ```mermaid
 flowchart TD
-    Open["Open / Save File (test.py)"] --> Watcher["Watcher & Scan Coordinator"]
-    Watcher --> Engine{"Engine Ready?"}
-    Engine -->|Yes| Scan["Execute Scan (REST / CLI)"]
-    Engine -->|No| Queue["Queue & Buffer Scan Request"]
-    Queue -->|Ready Fired| Flush["Flush & Execute Deduplicated Queue"]
-    Scan --> Diag["Publish SLOPGUARD Diagnostics"]
-    Diag --> QuickFix["1-Click Quick Fix CodeAction"]
-    QuickFix --> Rescan["Mandatory Rescan"]
-    Rescan --> Clean["Clean Results (Diagnostic Disappears)"]
+    subgraph EditorLifecycle ["VS Code Editor Events"]
+        EvOpen["Document Open"]
+        EvSave["Document Save (test.py)"]
+        EvConfig["Configuration Change"]
+    end
+
+    subgraph Discovery ["7-Tier CLI Discovery"]
+        D1{"1. slopguard.cliPath?"}
+        D2{"2. Cached Path?"}
+        D3{"3. System PATH?"}
+        D4{"4. Windows Python Scripts?<br/>(%APPDATA%\\Python\\*\\Scripts)"}
+        D5{"5. POSIX ~/.local/bin?"}
+        D6{"6. Workspace .venv?"}
+        D7{"7. python -m slopguard?"}
+
+        D1 -->|Found| Exec["Validated Executable"]
+        D1 -->|No| D2 -->|No| D3 -->|No| D4 -->|No| D5 -->|No| D6 -->|No| D7
+        D4 -->|Found| Exec
+        D3 -->|Found| Exec
+        D6 -->|Found| Exec
+    end
+
+    subgraph EngineManager ["Engine Process & State Machine"]
+        StateInit["INITIALIZING"] --> StateStart["STARTING"]
+        StateStart --> StateReady["READY (REST Daemon on :8000)"]
+        StateStart -->|Port busy / no REST| StateFallback["CLI_FALLBACK Mode"]
+        StateStart -->|Missing CLI| StateError["ERROR / ACTION REQUIRED"]
+    end
+
+    subgraph Coordinator ["Scan Coordinator & Debounce"]
+        EvSave --> Debounce["Debounce Buffer (300ms)"]
+        Debounce --> QueueCheck{"Engine Ready?"}
+        QueueCheck -->|No| Queue["Buffer Scan Request (Deduplicated)"]
+        QueueCheck -->|Yes| Dispatch["Dispatch Scan to Engine"]
+        StateReady -.->|Flush Event| Queue
+        Queue --> Dispatch
+    end
+
+    subgraph NativeUI ["Native VS Code Feedback"]
+        Dispatch --> Diag["Publish Diagnostics (Red Squigglies)"]
+        Dispatch --> Status["Update Status Bar ($(shield-x) N Blocked)"]
+        Diag --> CodeAction["Offer QuickFix CodeAction ('Replace with requests')"]
+        CodeAction --> Apply["Apply Workspace TextEdit"]
+        Apply --> MandatoryRescan["Mandatory Rescan Validation"]
+        MandatoryRescan -->|PASS| Clear["Clear Diagnostics Atomically"]
+    end
 ```
 
-### Features:
-- **Robust CLI Auto-Discovery**: 7-tier search resolving Python user scripts and virtualenvs.
-- **Inline Diagnostics**: High-visibility squigglies displaying Registry, Risk, and Suggested fix.
-- **Quick Fixes**: One-click replacement of typosquats with verified packages.
-- **Non-Blocking Architecture**: Background scan queue with zero editor freezing.
+#### Architectural Highlights:
+- **Zero-Config Discovery**: Probes Windows `%APPDATA%\Python\*\Scripts\slopguard.exe`, virtual environments, and system paths, injecting augmented environment variables into child processes to eliminate `ENOENT` spawn failures.
+- **Startup Race-Condition Protection**: Scan requests issued during extension activation are queued and deduplicated by URI and version, executing immediately once the backend reports readiness.
+- **Diagnostic Hygiene**: Atomic updates prevent diagnostic flickering, and closed documents are cleaned deterministically.
+- **Rescan Enforcement**: Quick Fixes are never accepted without automated rescan verification.
 
 ---
 
-## 14. Model Context Protocol (MCP) Server
+### 13.4 CLI & CI/CD Pipeline
 
-SLOPGUARD provides full **MCP Server** support for Cursor, Claude Desktop, Antigravity, and AI Agents over `stdio` and `sse` transports.
+The SLOPGUARD CLI is built for rapid developer interaction and automated supply-chain enforcement in CI/CD pipelines (GitHub Actions, GitLab CI, Jenkins).
 
-### Exposed Tools:
-- `verify_dependency`: Checks package existence, canonical identity, release count, and gate verdicts.
-- `scan_code`: Evaluates full code snippets or manifests before saving or running.
-- `inspect_evidence`: Retrieves live OSV vulnerabilities, repository URLs, and registry metadata.
-- `inspect_history`: Inspects temporal phantom memory observations and state transitions.
-- `propose_repair`: Generates verified replacement packages and AST unified diffs.
-- `rescan_patch`: Enforces mandatory rescan gate on proposed patches.
-- `gate_install`: Checks agent installation permits before running package managers.
+```mermaid
+flowchart LR
+    subgraph Trigger ["Pipeline Trigger"]
+        Commit["Git Commit / Pull Request"] --> Runner["CI Runner (GitHub Actions)"]
+    end
 
-### Quick Connect:
-Add to `.cursor/mcp.json` or `claude_desktop_config.json`:
-```json
-{
-  "mcpServers": {
-    "slopguard": {
-      "command": "slopguard",
-      "args": ["mcp", "run", "--transport", "stdio"]
-    }
-  }
-}
+    subgraph CLIExecution ["SLOPGUARD CI Execution"]
+        Runner --> Step1["pip install slopguard-ai"]
+        Step1 --> Step2["slopguard scan . --profile strict_ci --format json"]
+        Step2 --> Pipeline["Evaluate AST & Manifest Dependencies"]
+    end
+
+    subgraph GatingDecision ["Deterministic Policy Gate"]
+        Pipeline --> Check{"Any BLOCK or Critical HOLD?"}
+        Check -->|Yes| Fail["Exit Code 1<br/>Block Pull Request & Report Quarantine"]
+        Check -->|No| Pass["Exit Code 0<br/>Build & Deployment Proceed"]
+    end
 ```
 
----
-
-## 15. CLI Reference
-
+#### Core CLI Commands:
 ```bash
-# Verify single package
+# Verify a single package identity, release history, and trust
 slopguard verify requests
 
-# Scan code file or directory
-slopguard scan app.py --profile strict_ci
+# Scan source code or manifests with strict policy enforcement
+slopguard scan src/ --profile strict_ci
 
-# Run contextual repair
-slopguard repair cv2 --file app.py
+# Contextual AST repair with unified diff output
+slopguard repair requets --file src/app.py
 
-# Rescan patched file through mandatory verification gate
-slopguard rescan app.py
+# Rescan a patched file through the mandatory validation gate
+slopguard rescan src/app.py
 
-# Start MCP Server
+# Run Model Context Protocol server for AI agent co-pilots
 slopguard mcp run --transport stdio
 
-# Generate MCP Client Configurations (Claude / Cursor)
-slopguard mcp config
+# Export copy-pasteable MCP client configurations
+slopguard mcp config --client all
 
-# Start REST API daemon and Web Dashboard
-slopguard serve --port 8000
+# Launch the FastAPI REST daemon and Web Dashboard
+slopguard serve --host 127.0.0.1 --port 8000
 ```
 
 ---
 
-## 16. Failure-Safe Design
+## 14. Failure-Safe Design
 
 > **Crucial Guarantee**: Registry downtime, network timeouts, DNS failures, or HTTP 429 rate limits are **NEVER** classified as `NOT_FOUND`.
 
@@ -348,7 +542,7 @@ If a registry fails to respond:
 
 ---
 
-## 17. Benchmark & Evaluation
+## 15. Benchmark & Evaluation
 
 Evaluated on the frozen benchmark corpus across 4 standardized categories:
 
@@ -361,7 +555,7 @@ Evaluated on the frozen benchmark corpus across 4 standardized categories:
 
 ---
 
-## 18. Security Model & Limitations
+## 16. Security Model & Limitations
 
 - **Source of Truth**: The Python core (`slopguard-ai`) is the sole authority for security decisions; the VS Code extension acts purely as a client.
 - **Limitations**:
@@ -371,7 +565,7 @@ Evaluated on the frozen benchmark corpus across 4 standardized categories:
 
 ---
 
-## 19. Repository Structure
+## 17. Repository Structure
 
 ```
 win_if_you_can/
@@ -400,7 +594,7 @@ win_if_you_can/
 
 ---
 
-## 20. Testing & Verification
+## 18. Testing & Verification
 
 Run the test suite across components:
 
@@ -418,7 +612,7 @@ node scripts/acceptance_test.js
 
 ---
 
-## 21. Installation & Quickstart
+## 19. Installation & Quickstart
 
 ```bash
 # 1. Install from PyPI
@@ -433,6 +627,6 @@ slopguard scan test.py
 
 ---
 
-## 22. License
+## 20. License
 
 SLOPGUARD is licensed under the [Apache License, Version 2.0](LICENSE).
