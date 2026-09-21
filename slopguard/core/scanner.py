@@ -100,7 +100,7 @@ class ScannerService:
             raise ValueError(f"Unsupported language or manifest format: '{language}'")
 
     async def scan_dependencies(
-        self, extracted: List[ExtractedDependency], source_label: str = "<input>"
+        self, extracted: List[ExtractedDependency], source_label: str = "<input>", scenario: Optional[str] = None
     ) -> ScanResult:
         scan_id = str(uuid.uuid4())
         start_time = time.perf_counter()
@@ -383,13 +383,14 @@ class ScannerService:
             ecosystem=main_eco,
             dependencies=evaluated_list,
             summary=summary,
+            scenario=scenario,
         )
 
     async def scan_code(
-        self, content: str, language: str = "python", file_path: str = "<input>"
+        self, content: str, language: str = "python", file_path: str = "<input>", scenario: Optional[str] = None
     ) -> ScanResult:
         extracted = self.extract_from_source(content, language=language, file_path=file_path)
-        return await self.scan_dependencies(extracted, source_label=file_path)
+        return await self.scan_dependencies(extracted, source_label=file_path, scenario=scenario)
 
     async def scan_file(self, file_path: str) -> ScanResult:
         p = Path(file_path)

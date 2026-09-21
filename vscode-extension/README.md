@@ -1,144 +1,212 @@
 # SLOPGUARD — AI Dependency Firewall for VS Code
 
+[![VS Code Marketplace](https://img.shields.io/badge/VS_Code_Marketplace-v0.1.2-blue.svg)](https://marketplace.visualstudio.com/items?itemName=vishaldubey2210.slopguard)
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 [![Python Package](https://img.shields.io/pypi/v/slopguard-ai.svg)](https://pypi.org/project/slopguard-ai/)
-[![VS Code Extension](https://img.shields.io/badge/VS_Code-v0.1.0-brightgreen.svg)]()
 
-> **The Pre-Install AI Dependency Control Plane & Supply-Chain Firewall for VS Code.**
-> Sits directly between AI coding agents (Copilot, Cursor, Claude Code, Gemini Code Assist, Windsurf) and package registries to prevent dependency hallucination, typosquatting attacks, and unverified package execution.
-
----
-
-## 🏛 Architecture
-
-The SLOPGUARD VS Code extension is an **ergonomic Developer Experience (DX) and client layer**. It does **not** duplicate or rebuild security logic inside TypeScript.
-
-```
-      VS CODE EXTENSION (Client / Presentation / DX Layer)
-           │
-           ├─► Inline Diagnostics (Squigglies & Hover Tooltips)
-           ├─► Activity Bar TreeView (Dependencies & Phantoms)
-           ├─► Quick Fixes (1-Click Propose & Replace)
-           ├─► Webview Panel (Evidence Dossier & Evidence Graph)
-           └─► Status Bar Indicator (🛡 Live Metrics)
-                   │
-                   ▼ (REST API: localhost:8000 or CLI fallback)
-      SLOPGUARD CORE ENGINE (Python Package: slopguard-ai)
-           │
-     EXTRACT ──► IDENTITY ──► VERIFY ──► EVIDENCE ──► TRUST ──► MEMORY ──► POLICY GATE
-                                                                             │
-                                                                   ALLOW / HOLD / BLOCK
-```
+> **Pre-install AI Dependency Control Plane & Supply-Chain Firewall for VS Code.**
+> Sits directly between AI coding assistants (GitHub Copilot, Cursor, Claude Code, Gemini Code Assist, Windsurf) and external package registries to detect and prevent package hallucinations, typosquatting attacks, and malicious dependencies before installation or execution.
 
 ---
 
-## ⚡ Prerequisites
+## 1. Overview
+The SLOPGUARD VS Code extension (`vishaldubey2210.slopguard`) provides an always-on, pre-install defense layer inside the editor. It evaluates imports and manifests in real time, publishes high-visibility inline diagnostics, and provides 1-click Quick Fix code actions to replace hallucinated dependencies with verified packages.
 
-To use SLOPGUARD in VS Code, install the official SLOPGUARD Python package:
+---
 
+## 2. The Problem
+Autonomous AI agents and LLM code completion frequently generate hallucinated package names or make typosquatting errors. Attackers exploit this via **slopsquatting / pre-registration attacks**, registering hallucinated names on PyPI/npm with malicious pre-install hooks. Running `pip install` on an unverified dependency immediately executes attacker code on the developer machine.
+
+---
+
+## 3. Slopsquatting & Phantom Dependencies
+- **Hallucinated Package**: The AI generates `import langchain_hyper_fast_auth`, which does not exist.
+- **Pre-Registration**: An attacker claims the name on PyPI.
+- **Phantom Attack**: When a developer installs the package, the attacker's `setup.py` runs with arbitrary code execution.
+- **SLOPGUARD Defense**: Flags non-existent packages immediately as `BLOCK` (HTTP 404), records them in temporal memory, and halts installation attempts.
+
+---
+
+## 4. Architecture
+
+```mermaid
+flowchart TD
+    IDE["VS Code Editor (Open / Edit / Save)"]
+    Coord["Scan Coordinator & Queue"]
+    EngineMgr["Engine Manager (REST / CLI)"]
+    Core["slopguard-ai Python Core Engine"]
+    Diag["VS Code Diagnostics & QuickFix"]
+
+    IDE -->|Document Event| Coord
+    Coord --> EngineMgr
+    EngineMgr --> Core
+    Core --> Diag
+    Diag -->|Inline Squigglies| IDE
+```
+
+---
+
+## 5. How the Extension Works
+1. **Always-On Watching**: Listens to file saves and new file creations across Python, JavaScript, TypeScript, and manifests (`requirements.txt`, `pyproject.toml`, `package.json`).
+2. **Scan Coordinator**: Buffers scan requests during startup so no scans are dropped. Deduplicates requests per document.
+3. **Dual Execution Engine**: Connects to the high-speed local REST API (`http://127.0.0.1:8000`) if running; automatically falls back to the local `slopguard` CLI if the daemon is stopped.
+4. **Native Diagnostics**: Generates precise diagnostic squigglies mapped directly to import statement ranges.
+5. **Interactive Quick Fixes**: Replaces flagged packages with verified alternatives and triggers an immediate rescan.
+
+---
+
+## 6. Installation from Marketplace
+Install directly from the VS Code Extensions panel:
+1. Open VS Code (`Ctrl+Shift+X` or `Cmd+Shift+X`).
+2. Search for `SLOPGUARD`.
+3. Click **Install** on `SLOPGUARD — AI Dependency Firewall` by `vishaldubey2210`.
+
+---
+
+## 7. Python Core Installation
+SLOPGUARD requires the official `slopguard-ai` engine:
 ```bash
 pip install slopguard-ai
 ```
-
-Optionally launch the local daemon for millisecond-latency cached evaluations:
-```bash
-slopguard serve
-# Started server at http://127.0.0.1:8000
-```
-*(If the local daemon is not running, the extension automatically falls back to invoking the `slopguard` CLI).*
+*(Virtual environments in `.venv` or `venv` within open workspace folders are detected automatically).*
 
 ---
 
-## 🌟 Key Features
-
-### 1. Inline Diagnostics & Squigglies
-- **`BLOCK`**: Highlighted in red (`Error`) when an imported package cannot be verified on registries or poses high typosquatting risk.
-- **`HOLD` / `ALERT`**: Highlighted in yellow (`Warning`) when evidence is incomplete or when an unverified phantom package suddenly appears.
-- **`ALLOW`**: Displays blue informational hints when imports resolve to known canonical packages (e.g., `import cv2` resolves to `opencv-python`).
-
-### 2. Activity Bar Sidebar
-- **Dependency Control Plane**: Real-time breakdown of:
-  - 🛡 Workspace Overview & Total Evaluated Packages
-  - 🚫 Blocked Dependencies
-  - ⚠️ Review Required
-  - ✅ Verified Safe
-- **Temporal Phantom Watchlist**: Tracks dependencies that failed identity verification over time, showing first/last seen timestamps, observation counts, and alerting on `APPEARED` state changes.
-
-### 3. Quick Fixes & Repair Center
-- One-click Code Action to replace typosquatted or unverified dependencies with canonical alternatives suggested by the SLOPGUARD Repair Engine.
-- **Rescan Guarantee**: Applying a repair automatically triggers an immediate rescan. A repair is never assumed safe until the backend policy gate validates it.
-
-### 4. Interactive Evidence Dossier & Graph
-- Inspect the complete cryptographic & factual trail for any package:
-  - **Registry Metadata**: Official existence, release counts, latest version.
-  - **Repository & Provenance**: GitHub/GitLab origin, star count, license.
-  - **Advisory History**: Live vulnerability queries via OSV.
-  - **Evidence Graph**: Visual chain mapping `Import → Canonical → Registry → Trust Gate → Policy`.
-
-### 5. Status Bar Monitor
-- Compact indicator in the status bar:
-  ```
-  🛡 SLOPGUARD: 18 ✓ | 3 ⚠ | 2 🚫
-  ```
-- Click to open the SLOPGUARD Control Center or launch the full web dashboard.
+## 8. Automatic Scanning
+Scanning occurs automatically:
+- When a supported file is opened or saved.
+- When manifests (`requirements.txt`, `pyproject.toml`, `package.json`) are modified.
+- Across workspace files on extension startup (configurable).
+- Debounced and cached in memory to prevent registry flooding.
 
 ---
 
-## ⚙️ Configuration Settings
+## 9. Robust CLI Discovery
+The extension resolves the `slopguard` binary using a 7-tier priority search:
+1. User-configured path (`slopguard.cliPath`)
+2. Cached verified path
+3. `slopguard` on system `PATH`
+4. Windows Python user Scripts (`%APPDATA%\Python\Python*\Scripts\slopguard.exe`, `%LOCALAPPDATA%\Programs\Python`)
+5. macOS/Linux user bin (`~/.local/bin/slopguard`, `/opt/homebrew/bin`)
+6. Workspace virtual environments (`.venv/Scripts`, `venv/bin`)
+7. Python interpreter fallback (`python -m slopguard.cli.main`)
 
-| Setting | Default | Description |
-|---|---|---|
-| `slopguard.server.url` | `http://localhost:8000` | URL of the local or enterprise SLOPGUARD REST API. |
-| `slopguard.cli.path` | `slopguard` | Path or executable name for CLI fallback mode. |
-| `slopguard.autoScan` | `true` | Automatically scan active files on opening. |
-| `slopguard.scanOnSave` | `true` | Automatically scan files upon saving. |
-| `slopguard.policyProfile` | `STRICT_CI` | Policy gate profile (`DEVELOPMENT`, `STRICT_CI`, `ENTERPRISE`). |
-| `slopguard.exclude` | `["**/node_modules/**", "**/.venv/**", ...]` | Glob patterns to ignore during workspace scans. |
-| `slopguard.openDashboardAfterScan` | `false` | Automatically open the web dashboard when workspace scan finishes. |
-
----
-
-## 🔒 Privacy & Security Guarantees
-
-1. **Local-First Processing**: Code is processed locally against your own running SLOPGUARD daemon (`http://localhost:8000`) or CLI.
-2. **No Third-Party Code Uploads**: Your source code is never transmitted to external cloud servers or public LLM APIs from this extension.
-3. **Strict Content Security Policy (CSP)**: All Webviews run under rigid sandbox policies with script origin restrictions and zero untrusted HTML injection.
-4. **Bounded Transfers**: Scans are bounded to files under 10MB to eliminate denial-of-service risks.
+Discovered executables are validated with `slopguard --version` and logged to the `SLOPGUARD` Output channel.
 
 ---
 
-## 📦 Manual Installation via VSIX
+## 10. Configuration Settings
 
-To install the extension from a packaged `.vsix` file:
+| Setting | Type | Default | Description |
+| :--- | :---: | :---: | :--- |
+| `slopguard.enabled` | `boolean` | `true` | Master toggle for dependency protection. |
+| `slopguard.cliPath` | `string` | `"slopguard"` | Explicit path to the `slopguard` executable. |
+| `slopguard.serverUrl` | `string` | `"http://localhost:8000"` | Base URL for the SLOPGUARD REST API. |
+| `slopguard.profile` | `string` | `"STRICT_CI"` | Security policy profile (`DEVELOPMENT`, `STRICT_CI`, `ENTERPRISE`). |
+| `slopguard.autoScan.onSave` | `boolean` | `true` | Automatically scan supported files when saved. |
+| `slopguard.scanWorkspace` | `boolean` | `true` | Automatically scan workspace dependencies on startup. |
 
-```bash
-code --install-extension slopguard-0.1.0.vsix
+---
+
+## 11. Example: `import requets`
+When source code contains a typo such as:
+```python
+import requets
 ```
 
 ---
 
-## 🛠 Development & Building
+## 12. Expected BLOCK Result
+SLOPGUARD highlights `requets` with an error diagnostic:
+```text
+SLOPGUARD:
+Dependency "requets" could not be verified.
+Registry: NOT_FOUND
+Risk: HIGH
+Policy: BLOCK
+Suggested fix: requests
+Reasons: Package 'requets' not found on official registry (HTTP 404). Installation blocked to prevent dependency confusion and phantom hallucination attacks.
+```
 
+---
+
+## 13. `cv2` Identity Resolution
+When source code contains:
+```python
+import cv2
+```
+SLOPGUARD recognizes that `cv2` is an import alias for the canonical PyPI distribution `opencv-python`, verifies `opencv-python` release history on PyPI, and marks the import as verified (`ALLOW`).
+
+---
+
+## 14. Quick Fix
+1. Press `Ctrl+.` (`Cmd+.` on macOS) over the flagged import.
+2. Select **`SLOPGUARD: Replace 'requets' with verified 'requests'`**.
+3. The editor automatically applies the replacement and triggers a mandatory rescan.
+4. Upon passing policy verification, the diagnostic is removed.
+
+---
+
+## 15. REST + CLI Fallback
+- **REST Preferred**: Fast in-memory caching and sub-10ms response times.
+- **CLI Fallback**: If the REST server is unavailable, the extension automatically routes requests through the local `slopguard` binary.
+
+---
+
+## 16. Troubleshooting
+- **CLI Not Found**: Ensure `slopguard-ai` is installed (`pip install slopguard-ai`). If in a custom environment, set `slopguard.cliPath` to the absolute binary path.
+- **Inspection Logs**: Check **View > Output > SLOPGUARD** for live execution telemetry.
+
+---
+
+## 17. Supported Platforms
+- Windows (x64, ARM64)
+- macOS (Apple Silicon, Intel)
+- Linux (x64, ARM64)
+
+---
+
+## 18. Security Limitations
+- SLOPGUARD analyzes import declarations and manifest files; runtime dynamic `__import__()` with encrypted strings cannot be statically extracted.
+- Safety guarantees require running the mandatory rescan validation on code changes.
+
+---
+
+## 19. Development Setup
 ```bash
-# Clone the repository
 git clone https://github.com/Vishaldubey2210/win_if_you_can.git
 cd win_if_you_can/vscode-extension
-
-# Install dependencies
 npm install
-
-# Compile TypeScript
-npm run compile
-
-# Run tests
-npm test
-
-# Package VSIX archive
-npx vsce package
 ```
 
 ---
 
-## 📄 License
+## 20. Build Instructions
+```bash
+npm run compile
+```
 
+---
+
+## 21. Testing Instructions
+```bash
+npm test
+```
+Executes the comprehensive 30-point test suite validating discovery, queueing, diagnostics, and error handling.
+
+---
+
+## 22. VSIX Packaging
+```bash
+npx @vscode/vsce package --no-git-tag-version
+```
+
+---
+
+## 23. GitHub Repository
+Source code and issues: [https://github.com/Vishaldubey2210/win_if_you_can](https://github.com/Vishaldubey2210/win_if_you_can)
+
+---
+
+## 24. License
 Licensed under the [Apache License, Version 2.0](LICENSE).

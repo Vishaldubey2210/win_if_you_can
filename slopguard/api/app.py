@@ -11,6 +11,7 @@ from pydantic import BaseModel, Field
 
 from slopguard.core.models import (
     Ecosystem,
+    EvaluatedDependency,
     ExtractedDependency,
     RegistryEvidence,
     ScanResult,
@@ -80,6 +81,10 @@ class ScanRequest(BaseModel):
         description="Language or manifest format: python, javascript, typescript, requirements, pyproject, package_json",
     )
     source_label: Optional[str] = Field(default="<api_payload>")
+    scenario: Optional[str] = Field(
+        default=None,
+        description="Active scenario label: CLEAN SAMPLE, HOMOGLYPH ATTACK, PHANTOM DEPENDENCY, CUSTOM INPUT",
+    )
 
 
 class PolicySimulateRequest(BaseModel):
@@ -137,6 +142,7 @@ async def scan_endpoint(req: ScanRequest):
             content=req.content,
             language=req.language,
             file_path=req.source_label or "<api_payload>",
+            scenario=req.scenario,
         )
         return result
     except ValueError as val_err:
@@ -194,15 +200,49 @@ async def trust_endpoint(ecosystem: str, package_name: str):
 @app.get("/api/v1/graph/{ecosystem}/{package_name}")
 async def graph_endpoint(ecosystem: str, package_name: str):
     eco = parse_ecosystem(ecosystem)
-    releases = scanner_service.evidence_graph.get_package_releases(package_name, eco)
-    repository = scanner_service.evidence_graph.get_package_repository(package_name, eco)
-    advisories = scanner_service.evidence_graph.get_package_advisories(package_name, eco)
-    provenance = scanner_service.evidence_graph.get_package_provenance(package_name, eco)
-    history = scanner_service.evidence_graph.get_package_history(package_name, eco)
+
+    # Ingest package into evidence graph on-demand if not already ingested
+    dep = ExtractedDependency(name=package_name, ecosystem=eco)
+    identity = scanner_service.identity_resolver.resolve(dep)
+    resolved_pkg = identity.resolved_package or package_name
+
+    pkg_node = scanner_service.evidence_graph.get_package_node(resolved_pkg, eco) or scanner_service.evidence_graph.get_package_node(package_name, eco)
+    if not pkg_node:
+        adapter = scanner_service.pypi_adapter if eco == Ecosystem.PYPI else scanner_service.npm_adapter
+        registry = await adapter.verify_package(resolved_pkg)
+        advs, _ = await scanner_service.osv_adapter.query_advisories(
+            package_name=resolved_pkg, ecosystem=eco, version=None
+        )
+        prov = scanner_service.provenance_extractor.extract(registry)
+        trust = scanner_service.trust_evaluator.evaluate(identity, registry, advs, prov)
+        decision = scanner_service.policy_engine.evaluate(identity, trust, registry)
+        eval_dep = EvaluatedDependency(
+            extracted=dep,
+            identity=identity,
+            registry=registry,
+            trust=trust,
+            decision=decision,
+            timestamp=datetime.now(timezone.utc),
+        )
+        scanner_service.evidence_graph.ingest_evaluated_dependency(
+            dep=eval_dep,
+            advisories=advs,
+            provenance=prov,
+        )
+
+    pkg_node = scanner_service.evidence_graph.get_package_node(resolved_pkg, eco) or scanner_service.evidence_graph.get_package_node(package_name, eco)
+    import_nodes = scanner_service.evidence_graph.get_package_imports(resolved_pkg, eco) or scanner_service.evidence_graph.get_package_imports(package_name, eco)
+    releases = scanner_service.evidence_graph.get_package_releases(resolved_pkg, eco) or scanner_service.evidence_graph.get_package_releases(package_name, eco)
+    repository = scanner_service.evidence_graph.get_package_repository(resolved_pkg, eco) or scanner_service.evidence_graph.get_package_repository(package_name, eco)
+    advisories = scanner_service.evidence_graph.get_package_advisories(resolved_pkg, eco) or scanner_service.evidence_graph.get_package_advisories(package_name, eco)
+    provenance = scanner_service.evidence_graph.get_package_provenance(resolved_pkg, eco) or scanner_service.evidence_graph.get_package_provenance(package_name, eco)
+    history = scanner_service.evidence_graph.get_package_history(resolved_pkg, eco) or scanner_service.evidence_graph.get_package_history(package_name, eco)
 
     return {
         "package": package_name,
         "ecosystem": eco.value,
+        "import_node": import_nodes[0].model_dump(mode="json") if import_nodes else None,
+        "package_node": pkg_node.model_dump(mode="json") if pkg_node else None,
         "releases": [r.model_dump(mode="json") for r in releases],
         "repository": repository.model_dump(mode="json") if repository else None,
         "advisories": [a.model_dump(mode="json") for a in advisories],
@@ -361,6 +401,7 @@ if STATIC_DIR.exists():
     app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
 @app.get("/")
+@app.get("/dashboard")
 async def serve_index():
     index_file = STATIC_DIR / "index.html"
     if index_file.exists():

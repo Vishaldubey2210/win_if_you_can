@@ -15,6 +15,10 @@ async def test_mcp_tool_definitions():
     assert "inspect_history" in names
     assert "propose_repair" in names
     assert "rescan_patch" in names
+    assert "scan_code" in names
+    assert "gate_install" in names
+    assert "list_phantoms" in names
+    assert "simulate_policy" in names
 
 
 @pytest.mark.asyncio
@@ -47,3 +51,24 @@ async def test_mcp_execute_propose_repair():
     assert result["candidates_found"] > 0
     assert result["best_candidate"]["candidate_package"] == "opencv-python"
     assert "import cv2" in code
+
+
+@pytest.mark.asyncio
+async def test_mcp_execute_scan_code_tool():
+    gateway = MCPGateway()
+    code = "import os\nimport sys"
+    result = await gateway.execute_tool("scan_code", {"code": code, "language": "python"})
+    assert result["allowed"] is True
+    assert len(result["dependencies"]) == 2
+    names = [d["name"] for d in result["dependencies"]]
+    assert "os" in names
+    assert "sys" in names
+
+
+@pytest.mark.asyncio
+async def test_mcp_execute_list_phantoms_tool():
+    gateway = MCPGateway()
+    result = await gateway.execute_tool("list_phantoms", {})
+    assert "count" in result
+    assert "phantoms" in result
+    assert isinstance(result["phantoms"], list)

@@ -42,6 +42,17 @@ def cli():
     pass
 
 
+@cli.command("serve")
+@click.option("--host", default="127.0.0.1", help="Host interface to bind.")
+@click.option("--port", default=8000, type=int, help="Port to bind.")
+@click.option("--reload", is_flag=True, help="Enable auto-reload for development.")
+def serve_cmd(host: str, port: int, reload: bool):
+    """Start the SLOPGUARD REST API & Control Center server."""
+    import uvicorn
+    console.print(f"[bold cyan]Starting SLOPGUARD REST Control Plane on http://{host}:{port}[/bold cyan]")
+    uvicorn.run("slopguard.api.app:app", host=host, port=port, reload=reload, log_level="info")
+
+
 @cli.command("scan")
 @click.argument("target", type=click.Path(exists=True))
 @click.option("--profile", "-p", type=click.Choice(["development", "strict_ci", "enterprise"], case_sensitive=False), default=None, help="Policy profile to evaluate.")
@@ -604,6 +615,110 @@ def policy_cmd(action: str, profile: str, json_output: bool):
     console.print(f"[dim]Policy Version: {cfg.version} | Description: {cfg.description}[/dim]")
 
 
+@cli.group("mcp")
+def mcp_group():
+    """Model Context Protocol (MCP) Server for AI coding assistants."""
+    pass
+
+
+@mcp_group.command("run")
+@click.option("--transport", "-t", type=click.Choice(["stdio", "sse"], case_sensitive=False), default="stdio", help="Transport protocol (stdio or sse).")
+@click.option("--host", default="127.0.0.1", help="Host to bind for SSE transport.")
+@click.option("--port", "-p", default=8001, type=int, help="Port to bind for SSE transport.")
+def mcp_run_cmd(transport: str, host: str, port: int):
+    """Start the SLOPGUARD MCP Server for AI assistants (Claude, Cursor, Antigravity, etc.)."""
+    from slopguard.mcp.server import run_mcp_server
+    if transport.lower() == "stdio":
+        err_console.print("[dim green]Starting SLOPGUARD MCP Server on stdio transport...[/dim green]")
+        run_mcp_server(transport="stdio")
+    else:
+        console.print(Panel.fit(
+            f"[bold cyan]Starting SLOPGUARD MCP Server (SSE Transport)[/bold cyan]\n"
+            f"SSE Endpoint: [bold green]http://{host}:{port}/sse[/bold green]\n"
+            f"Messages: [bold blue]http://{host}:{port}/messages/[/bold blue]",
+            border_style="cyan"
+        ))
+        run_mcp_server(transport="sse", host=host, port=port)
+
+
+@mcp_group.command("config")
+@click.option("--client", "-c", type=click.Choice(["claude", "cursor", "antigravity", "all"], case_sensitive=False), default="all", help="Target client configuration.")
+def mcp_config_cmd(client: str):
+    """Generate ready-to-use MCP configuration JSON for Claude Desktop, Cursor, or Antigravity."""
+    claude_cfg = {
+        "mcpServers": {
+            "slopguard": {
+                "command": sys.executable,
+                "args": ["-m", "slopguard.mcp.server", "--transport", "stdio"],
+            }
+        }
+    }
+
+    cursor_cfg = {
+        "mcpServers": {
+            "slopguard": {
+                "command": sys.executable,
+                "args": ["-m", "slopguard.mcp.server", "--transport", "stdio"],
+            }
+        }
+    }
+
+    sse_cfg = {
+        "mcpServers": {
+            "slopguard": {
+                "url": "http://127.0.0.1:8001/sse",
+            }
+        }
+    }
+
+    target = client.lower()
+    if target in ("claude", "all"):
+        console.print(Panel(
+            json.dumps(claude_cfg, indent=2),
+            title="Claude Desktop Config (~/AppData/Roaming/Claude/claude_desktop_config.json)",
+            border_style="magenta",
+        ))
+    if target in ("cursor", "all"):
+        console.print(Panel(
+            json.dumps(cursor_cfg, indent=2),
+            title="Cursor MCP Config (.cursor/mcp.json)",
+            border_style="blue",
+        ))
+    if target in ("antigravity", "all"):
+        console.print(Panel(
+            json.dumps(claude_cfg, indent=2),
+            title="Antigravity / VS Code Config (.agents/mcp_config.json)",
+            border_style="green",
+        ))
+    if target == "all":
+        console.print(Panel(
+            json.dumps(sse_cfg, indent=2),
+            title="Network SSE Config (for any remote MCP client)",
+            border_style="yellow",
+        ))
+
+
+@mcp_group.command("tools")
+def mcp_tools_cmd():
+    """List all registered MCP security tools and their descriptions."""
+    from slopguard.mcp.gateway import MCPGateway
+    gateway = MCPGateway()
+    tools = gateway.get_tool_definitions()
+
+    table = Table(title="SLOPGUARD Registered MCP Tools", show_lines=True)
+    table.add_column("Tool Name", style="bold cyan")
+    table.add_column("Description")
+    table.add_column("Parameters", style="dim")
+
+    for t in tools:
+        props = list(t.get("inputSchema", {}).get("properties", {}).keys())
+        reqs = t.get("inputSchema", {}).get("required", [])
+        params_desc = ", ".join([f"{p}{'*' if p in reqs else ''}" for p in props]) or "none"
+        table.add_row(t["name"], t.get("description", ""), params_desc)
+
+    console.print(table)
+    console.print("[dim]* = required parameter[/dim]")
+
+
 if __name__ == "__main__":
     cli()
-

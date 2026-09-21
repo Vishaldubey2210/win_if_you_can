@@ -160,3 +160,4 @@ class ScanResult(BaseModel):
     ecosystem: Ecosystem
     dependencies: List[EvaluatedDependency] = Field(default_factory=list)
     summary: ScanSummary
+    scenario: Optional[str] = Field(default=None, description="Active scenario label associated with the scan")

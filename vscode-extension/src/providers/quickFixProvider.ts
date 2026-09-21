@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { EvaluatedDependency } from '../types/slopguard';
+import { EvaluatedDependency, extractSuggestedTarget } from '../types/slopguard';
 
 export class QuickFixProvider implements vscode.CodeActionProvider {
     public static readonly providedCodeActionKinds = [
@@ -25,12 +25,8 @@ export class QuickFixProvider implements vscode.CodeActionProvider {
             }
 
             // 1. Action: Apply suggested fix if available
-            let suggestedTarget: string | undefined;
-            if (dep.trust.typosquat_details?.similar_package) {
-                suggestedTarget = dep.trust.typosquat_details.similar_package;
-            } else if (dep.decision.suggested_fix && !dep.decision.suggested_fix.includes(' ')) {
-                suggestedTarget = dep.decision.suggested_fix;
-            }
+            const repairInfo = extractSuggestedTarget(dep);
+            const suggestedTarget = repairInfo?.target;
 
             if (suggestedTarget) {
                 const action = new vscode.CodeAction(

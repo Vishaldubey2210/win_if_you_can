@@ -404,6 +404,105 @@
       justify-content: center;
     }
 
+    /* Interactive Graph Nodes */
+    .graph-node {
+      cursor: pointer !important;
+      outline: none;
+      transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+      pointer-events: auto;
+    }
+    .graph-node * {
+      cursor: pointer !important;
+      pointer-events: auto;
+    }
+    .graph-node circle {
+      transition: stroke 0.2s ease, stroke-width 0.2s ease, filter 0.2s ease;
+    }
+    .graph-node:hover circle {
+      filter: drop-shadow(0 0 10px rgba(56, 189, 248, 0.6));
+      stroke-width: 3px;
+    }
+    .graph-node:hover text {
+      fill: #ffffff;
+    }
+    .graph-node.node-active circle {
+      stroke: #38bdf8 !important;
+      stroke-width: 4px !important;
+      filter: drop-shadow(0 0 14px rgba(56, 189, 248, 0.95)) !important;
+    }
+    .graph-node:focus-visible circle {
+      stroke: #67e8f9 !important;
+      stroke-width: 4px !important;
+    }
+
+    /* Evidence Detail Panel inside Graph Screen */
+    .evidence-panel {
+      margin-top: 1.25rem;
+      background: #080d1a;
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      padding: 1.25rem;
+      display: none;
+      animation: fadeIn 0.2s ease-in-out;
+    }
+    .evidence-panel.open {
+      display: block;
+    }
+    .evidence-panel-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 1rem;
+      padding-bottom: 0.75rem;
+      border-bottom: 1px solid var(--border-color);
+    }
+    .evidence-panel-title {
+      font-size: 0.95rem;
+      font-weight: 700;
+      color: #f8fafc;
+      display: flex;
+      align-items: center;
+      gap: 0.6rem;
+    }
+    .evidence-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 0.75rem;
+      margin-bottom: 1rem;
+    }
+    .evidence-item {
+      background: var(--bg-subtle);
+      border: 1px solid var(--border-color);
+      border-radius: 6px;
+      padding: 0.6rem 0.85rem;
+    }
+    .evidence-item-label {
+      font-size: 0.7rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--text-muted);
+      margin-bottom: 0.25rem;
+    }
+    .evidence-item-value {
+      font-size: 0.85rem;
+      color: var(--text-main);
+      word-break: break-word;
+      font-family: var(--font-mono);
+    }
+    .raw-evidence-box {
+      background: #040711;
+      border: 1px solid var(--border-color);
+      border-radius: 6px;
+      padding: 0.85rem;
+      font-family: var(--font-mono);
+      font-size: 0.75rem;
+      color: #94a3b8;
+      max-height: 240px;
+      overflow-y: auto;
+      white-space: pre-wrap;
+      word-break: break-all;
+    }
+
     /* Modal / Detail Panel */
     .drawer {
       position: fixed;
@@ -563,8 +662,14 @@
       </div>
 
       <div class="card" style="margin-bottom: 1.5rem;">
-        <div class="card-header">
-          <div class="card-title">Source Code or Manifest Input</div>
+        <div class="card-header" style="flex-wrap: wrap; gap: 0.75rem;">
+          <div style="display:flex; align-items:center; gap:0.85rem; flex-wrap:wrap;">
+            <div class="card-title" style="margin:0;">Source Code or Manifest Input</div>
+            <div style="display:inline-flex; align-items:center; gap:0.4rem; background:var(--bg-subtle); padding:0.25rem 0.65rem; border-radius:6px; border:1px solid var(--border-color);">
+              <span style="font-size:0.72rem; color:var(--text-muted); font-weight:700; text-transform:uppercase; letter-spacing:0.05em;">ACTIVE SCENARIO:</span>
+              <span id="active-scenario-badge" class="badge badge-alert" style="font-size:0.72rem; font-weight:700;">PHANTOM DEPENDENCY</span>
+            </div>
+          </div>
           <select id="scan-lang-select" style="background: var(--bg-subtle); color: var(--text-main); border: 1px solid var(--border-color); padding: 0.4rem 0.75rem; border-radius: 6px;">
             <option value="python">Python Source (.py)</option>
             <option value="javascript">JavaScript / TypeScript</option>
@@ -575,18 +680,22 @@
         <textarea id="scan-code-input" class="code-area">import os
 import sys
 import cv2
-import requets
+import requests
 import langchain_fastapi_agent_optimizer</textarea>
-        <div class="btn-group">
-          <button class="btn btn-primary" onclick="runLiveScan()">🛡️ Execute SLOPGUARD Scan</button>
-          <button class="btn btn-secondary" onclick="loadSampleCode('clean')">Load Clean Sample</button>
-          <button class="btn btn-secondary" onclick="loadSampleCode('homoglyph')">Load Homoglyph Attack</button>
+        <div class="btn-group" style="display:flex; flex-wrap:wrap; gap:0.5rem;">
+          <button class="btn btn-primary" id="btn-execute-scan" onclick="runLiveScan()">🛡️ Execute SLOPGUARD Scan</button>
+          <button class="btn btn-secondary" id="btn-load-clean" onclick="loadSampleCode('clean')">Load Clean Sample</button>
+          <button class="btn btn-secondary" id="btn-load-homoglyph" onclick="loadSampleCode('homoglyph')">Load Homoglyph Attack</button>
+          <button class="btn btn-secondary" id="btn-load-phantom" onclick="loadSampleCode('phantom')">Load Phantom Demo</button>
         </div>
       </div>
 
       <div class="card" id="scan-results-card">
-        <div class="card-header">
-          <div class="card-title">Scan Verdict Stream</div>
+        <div class="card-header" style="flex-wrap: wrap; gap: 0.75rem;">
+          <div style="display:flex; align-items:center; gap:0.75rem;">
+            <div class="card-title" style="margin:0;">Scan Verdict Stream</div>
+            <span id="verdict-scenario-badge" class="badge" style="font-size:0.72rem; font-weight:700; display:none;"></span>
+          </div>
           <div id="scan-duration-badge" style="font-size: 0.8rem; color: var(--text-muted);">Duration: --</div>
         </div>
         <table class="data-table" id="scan-results-table">
@@ -644,7 +753,7 @@ import langchain_fastapi_agent_optimizer</textarea>
         <div class="card-header">
           <div class="card-title">Interactive Evidence Graph</div>
           <div style="display:flex; gap: 0.75rem;">
-            <input type="text" id="graph-pkg-input" value="requests" style="background: var(--bg-subtle); color: #fff; border: 1px solid var(--border-color); padding: 0.4rem 0.75rem; border-radius: 6px; font-size: 0.85rem;">
+            <input type="text" id="graph-pkg-input" value="requests" onkeydown="if(event.key==='Enter')loadGraphForPackage()" style="background: var(--bg-subtle); color: #fff; border: 1px solid var(--border-color); padding: 0.4rem 0.75rem; border-radius: 6px; font-size: 0.85rem;">
             <button class="btn btn-secondary" onclick="loadGraphForPackage()">Query Graph</button>
           </div>
         </div>
@@ -653,6 +762,39 @@ import langchain_fastapi_agent_optimizer</textarea>
         </p>
         <div class="graph-viewport" id="graph-svg-container">
           <!-- Rendered SVG Graph -->
+        </div>
+
+        <!-- Evidence Detail Panel (Opens on node click) -->
+        <div id="graph-evidence-panel" class="evidence-panel" role="region" aria-label="Evidence Node Detail">
+          <div class="evidence-panel-header">
+            <div class="evidence-panel-title">
+              <span id="ev-type-badge" class="badge badge-allow">NODE TYPE</span>
+              <span id="ev-node-title" style="font-family:var(--font-mono); font-size:1rem; color:#fff;">Node Name</span>
+            </div>
+            <div style="display:flex; align-items:center; gap:0.6rem;">
+              <span id="ev-status-badge" class="badge badge-allow">STATUS</span>
+              <button class="btn btn-secondary" style="padding: 0.25rem 0.65rem; font-size: 0.8rem; cursor:pointer;" onclick="closeGraphEvidencePanel()" title="Close Evidence Panel">✕ Close</button>
+            </div>
+          </div>
+
+          <div id="ev-empty-state" style="display:none; padding:1.5rem; text-align:center; color:var(--text-muted); background:var(--bg-subtle); border-radius:6px; border: 1px dashed var(--border-color);">
+            <div style="font-size:1.5rem; margin-bottom:0.5rem;">🔍</div>
+            <div style="font-size:0.95rem; font-weight:600; color:var(--text-main);">No evidence available for this node.</div>
+            <div id="ev-empty-reason" style="font-size:0.8rem; margin-top:0.35rem; color:var(--text-dim);"></div>
+          </div>
+
+          <div id="ev-content-body">
+            <div class="evidence-grid" id="ev-metadata-grid">
+              <!-- Populated dynamically via selectGraphNode() -->
+            </div>
+
+            <div id="ev-extra-content" style="margin-bottom: 1rem;"></div>
+
+            <details style="background:var(--bg-subtle); border:1px solid var(--border-color); border-radius:6px; padding:0.6rem 0.85rem; font-size:0.8rem;">
+              <summary style="cursor:pointer; font-weight:600; color:var(--text-muted); user-select:none;">Raw / Structured Evidence Payload (JSON)</summary>
+              <pre id="ev-raw-json" class="raw-evidence-box" style="margin-top:0.5rem;"></pre>
+            </details>
+          </div>
         </div>
       </div>
     </section>
@@ -913,6 +1055,17 @@ response = requets.get("https://api.github.com")</textarea>
   </div>
 
   <script>
+    // Safe HTML Escaping (prevents XSS / script injection)
+    function escapeHtml(str) {
+      if (str === null || str === undefined) return '';
+      return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+    }
+
     // Tab switching
     function switchTab(tabId) {
       document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
@@ -928,63 +1081,146 @@ response = requets.get("https://api.github.com")</textarea>
       if (tabId === 'graph') loadGraphForPackage();
     }
 
-    // In-memory scan cache for dashboard
+    // In-memory scan cache & Scenario State
     let lastScanResult = null;
+    let currentScenario = 'PHANTOM DEPENDENCY';
+
+    function getScenarioBadgeClass(scenarioName) {
+      switch (scenarioName) {
+        case 'CLEAN SAMPLE': return 'badge-allow';
+        case 'HOMOGLYPH ATTACK': return 'badge-block';
+        case 'PHANTOM DEPENDENCY': return 'badge-alert';
+        case 'CUSTOM INPUT': default: return 'badge-hold';
+      }
+    }
+
+    function setScenario(scenarioName) {
+      currentScenario = scenarioName;
+      const activeBadge = document.getElementById('active-scenario-badge');
+      if (activeBadge) {
+        activeBadge.textContent = scenarioName;
+        activeBadge.className = 'badge ' + getScenarioBadgeClass(scenarioName);
+      }
+      try {
+        localStorage.setItem('slopguard_scan_scenario', scenarioName);
+      } catch (e) {}
+    }
+
+    // Load sample code with explicit scenarios
+    function loadSampleCode(type) {
+      const area = document.getElementById('scan-code-input');
+      const langSelect = document.getElementById('scan-lang-select');
+      if (langSelect) langSelect.value = 'python';
+
+      if (type === 'clean') {
+        area.value = `import os\nimport sys\nimport requests\nimport numpy as np`;
+        setScenario('CLEAN SAMPLE');
+      } else if (type === 'homoglyph') {
+        // IMPORTANT: 'nump\u0443' contains Cyrillic Small Letter U (U+0443), NOT Latin 'y' (U+0079).
+        // The two characters are visually identical in most monospace fonts — this IS the attack.
+        area.value = `# Homoglyph Attack Demo\n# The import below uses Cyrillic '\u0443' (U+0443) not Latin 'y' (U+0079)\n# They look identical in monospace: nump\u0443 vs numpy\nimport nump\u0443  # \u26a0 CONFUSABLE: final char is U+0443 (Cyrillic \u0443), not U+0079 (Latin y)\nimport requests`;
+        setScenario('HOMOGLYPH ATTACK');
+      } else if (type === 'phantom') {
+        area.value = `import os\nimport sys\nimport cv2\nimport requests\nimport langchain_fastapi_agent_optimizer`;
+        setScenario('PHANTOM DEPENDENCY');
+      }
+      try {
+        localStorage.setItem('slopguard_scan_code', area.value);
+        localStorage.setItem('slopguard_scan_lang', 'python');
+      } catch (e) {}
+    }
+
+    // Render scan results table & update scenario badges
+    function renderScanResults(data) {
+      lastScanResult = data;
+      const scenario = data.scenario || currentScenario;
+
+      const durationBadge = document.getElementById('scan-duration-badge');
+      if (durationBadge && data.summary) {
+        durationBadge.textContent = `Duration: ${data.summary.duration_ms}ms | Extracted: ${data.summary.total_extracted}`;
+      }
+      if (data.summary) {
+        const allowEl = document.getElementById('metric-allow');
+        const holdEl = document.getElementById('metric-hold');
+        const blockEl = document.getElementById('metric-block');
+        if (allowEl) allowEl.textContent = data.summary.allowed_count;
+        if (holdEl) holdEl.textContent = data.summary.hold_count;
+        if (blockEl) blockEl.textContent = data.summary.blocked_count;
+      }
+
+      const verdictBadge = document.getElementById('verdict-scenario-badge');
+      if (verdictBadge) {
+        verdictBadge.textContent = scenario;
+        verdictBadge.className = 'badge ' + getScenarioBadgeClass(scenario);
+        verdictBadge.style.display = 'inline-flex';
+      }
+
+      const tbody = document.getElementById('scan-results-body');
+      if (!tbody) return;
+      tbody.innerHTML = '';
+
+      if (!data.dependencies || data.dependencies.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="7" style="text-align:center; color:var(--text-dim); padding: 2rem;">No dependencies detected.</td></tr>`;
+        return;
+      }
+
+      data.dependencies.forEach((dep, idx) => {
+        const row = document.createElement('tr');
+        const v = dep.decision.action;
+        const badgeClass = v === 'ALLOW' ? 'badge-allow' : v === 'HOLD' ? 'badge-hold' : v === 'BLOCK' ? 'badge-block' : 'badge-alert';
+        const regVal = dep.registry ? dep.registry.status : (dep.identity.is_stdlib ? 'STDLIB' : 'N/A');
+
+        row.innerHTML = `
+          <td><strong><code>${escapeHtml(dep.extracted.name)}</code></strong></td>
+          <td><code>${escapeHtml(dep.identity.resolved_package)}</code></td>
+          <td><span style="font-size:0.75rem; color:var(--text-muted)">${escapeHtml(regVal)}</span></td>
+          <td><span class="badge ${badgeClass}">${escapeHtml(v)}</span></td>
+          <td><span style="font-size:0.8rem; font-weight:600; color:${dep.decision.risk_level==='HIGH'?'#f87171':dep.decision.risk_level==='MEDIUM'?'#fbbf24':'#34d399'}">${escapeHtml(dep.decision.risk_level)}</span></td>
+          <td style="font-size:0.8rem;">${dep.decision.reasons.map(r => escapeHtml(r)).join('<br>')}</td>
+          <td><button class="btn btn-secondary" style="padding:0.25rem 0.6rem; font-size:0.75rem;" onclick="openDependencyDrawer(${idx})">Inspect</button></td>
+        `;
+        tbody.appendChild(row);
+      });
+    }
 
     // Run Live Scan
     async function runLiveScan() {
       const code = document.getElementById('scan-code-input').value;
       const lang = document.getElementById('scan-lang-select').value;
-      const durationBadge = document.getElementById('scan-duration-badge');
       const tbody = document.getElementById('scan-results-body');
 
-      tbody.innerHTML = `<tr><td colspan="7" style="text-align:center; padding: 2rem;">⚡ Evaluating through AST, Identity, Registry, OSV, and Policy Gate...</td></tr>`;
+      const verdictBadge = document.getElementById('verdict-scenario-badge');
+      if (verdictBadge) {
+        verdictBadge.textContent = currentScenario;
+        verdictBadge.className = 'badge ' + getScenarioBadgeClass(currentScenario);
+        verdictBadge.style.display = 'inline-flex';
+      }
+
+      tbody.innerHTML = `<tr><td colspan="7" style="text-align:center; padding: 2rem;">⚡ Evaluating through AST, Identity, Registry, OSV, and Policy Gate [Scenario: ${escapeHtml(currentScenario)}]...</td></tr>`;
 
       try {
         const resp = await fetch('/api/v1/scan', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ content: code, language: lang, source_label: 'web_dashboard.py' })
+          body: JSON.stringify({
+            content: code,
+            language: lang,
+            source_label: 'web_dashboard.py',
+            scenario: currentScenario
+          })
         });
         const data = await resp.json();
-        lastScanResult = data;
+        data.scenario = currentScenario;
+        renderScanResults(data);
 
-        durationBadge.textContent = `Duration: ${data.summary.duration_ms}ms | Extracted: ${data.summary.total_extracted}`;
-        document.getElementById('metric-allow').textContent = data.summary.allowed_count;
-        document.getElementById('metric-hold').textContent = data.summary.hold_count;
-        document.getElementById('metric-block').textContent = data.summary.blocked_count;
-
-        tbody.innerHTML = '';
-        data.dependencies.forEach((dep, idx) => {
-          const row = document.createElement('tr');
-          const v = dep.decision.action;
-          const badgeClass = v === 'ALLOW' ? 'badge-allow' : v === 'HOLD' ? 'badge-hold' : v === 'BLOCK' ? 'badge-block' : 'badge-alert';
-          const regVal = dep.registry ? dep.registry.status : (dep.identity.is_stdlib ? 'STDLIB' : 'N/A');
-
-          row.innerHTML = `
-            <td><strong><code>${dep.extracted.name}</code></strong></td>
-            <td><code>${dep.identity.resolved_package}</code></td>
-            <td><span style="font-size:0.75rem; color:var(--text-muted)">${regVal}</span></td>
-            <td><span class="badge ${badgeClass}">${v}</span></td>
-            <td><span style="font-size:0.8rem; font-weight:600; color:${dep.decision.risk_level==='HIGH'?'#f87171':dep.decision.risk_level==='MEDIUM'?'#fbbf24':'#34d399'}">${dep.decision.risk_level}</span></td>
-            <td style="font-size:0.8rem;">${dep.decision.reasons.join('<br>')}</td>
-            <td><button class="btn btn-secondary" style="padding:0.25rem 0.6rem; font-size:0.75rem;" onclick="openDependencyDrawer(${idx})">Inspect</button></td>
-          `;
-          tbody.appendChild(row);
-        });
-
+        try {
+          localStorage.setItem('slopguard_last_scan', JSON.stringify(data));
+          localStorage.setItem('slopguard_scan_code', code);
+          localStorage.setItem('slopguard_scan_scenario', currentScenario);
+          localStorage.setItem('slopguard_scan_lang', lang);
+        } catch (e) {}
       } catch (err) {
-        tbody.innerHTML = `<tr><td colspan="7" style="text-align:center; color:#f87171; padding: 2rem;">Scan error: ${err}</td></tr>`;
-      }
-    }
-
-    // Load sample code
-    function loadSampleCode(type) {
-      const area = document.getElementById('scan-code-input');
-      if (type === 'clean') {
-        area.value = `import os\nimport sys\nimport requests\nimport numpy as np`;
-      } else if (type === 'homoglyph') {
-        area.value = `# Visual homoglyph using Cyrillic 'у' (U+0443)\nimport nump\u0443\nimport requests`;
+        tbody.innerHTML = `<tr><td colspan="7" style="text-align:center; color:#f87171; padding: 2rem;">Scan error: ${escapeHtml(err.message || err)}</td></tr>`;
       }
     }
 
@@ -996,38 +1232,80 @@ response = requets.get("https://api.github.com")</textarea>
       const overlay = document.getElementById('drawer-overlay');
       document.getElementById('drawer-pkg-name').textContent = dep.identity.resolved_package;
 
+      // Build character-level Unicode breakdown for homoglyph evidence
+      const ts = dep.trust.typosquat_details;
+      const isHomoglyph = ts && ts.reason && ts.reason.toLowerCase().includes('homoglyph');
+      let homoglyphPanel = '';
+      if (isHomoglyph) {
+        const importName = dep.extracted.name || '';
+        const charRows = [...importName].map(ch => {
+          const cp = ch.codePointAt(0);
+          const hex = 'U+' + cp.toString(16).toUpperCase().padStart(4, '0');
+          const isAscii = cp < 128;
+          const isLatin = cp >= 0x0041 && cp <= 0x007A;
+          const isCyrillic = cp >= 0x0400 && cp <= 0x04FF;
+          const isGreek = cp >= 0x0370 && cp <= 0x03FF;
+          const isSuspicious = !isAscii;
+          const script = isCyrillic ? 'Cyrillic ⚠' : isGreek ? 'Greek ⚠' : isLatin ? 'Latin' : isAscii ? 'ASCII' : 'Non-ASCII ⚠';
+          const color = isSuspicious ? '#f87171' : '#34d399';
+          return `<tr><td style="font-family:monospace;font-size:1.1rem;padding:0.2rem 0.5rem;color:${color};">${escapeHtml(ch)}</td><td style="padding:0.2rem 0.5rem;color:${color};font-size:0.8rem;">${hex}</td><td style="padding:0.2rem 0.5rem;color:${color};font-size:0.8rem;">${script}</td></tr>`;
+        }).join('');
+        homoglyphPanel = `
+          <div style="background:rgba(248,113,113,0.08); border:1px solid rgba(248,113,113,0.4); padding:0.85rem; border-radius:6px; margin-top:0.5rem;">
+            <h4 style="font-size:0.9rem; font-weight:600; color:#f87171; margin-bottom:0.5rem;">⚠ Unicode Confusable Analysis</h4>
+            <div style="font-size:0.8rem; color:var(--text-muted); margin-bottom:0.5rem;">
+              Characters flagged <span style="color:#f87171;">red</span> are non-ASCII and visually resemble ASCII letters.
+              Cyrillic У (U+0443) looks identical to Latin y (U+0079) in most monospace fonts.
+            </div>
+            <table style="border-collapse:collapse; font-size:0.82rem; width:100%;">
+              <thead><tr style="border-bottom:1px solid rgba(255,255,255,0.1);">
+                <th style="padding:0.2rem 0.5rem; text-align:left; color:var(--text-dim);">Char</th>
+                <th style="padding:0.2rem 0.5rem; text-align:left; color:var(--text-dim);">Code Point</th>
+                <th style="padding:0.2rem 0.5rem; text-align:left; color:var(--text-dim);">Script</th>
+              </tr></thead>
+              <tbody>${charRows}</tbody>
+            </table>
+            <div style="margin-top:0.5rem; font-size:0.8rem; color:#fbbf24;">
+              ⚡ Engine detected: <strong>${escapeHtml(ts.reason)}</strong>
+            </div>
+            <div style="margin-top:0.25rem; font-size:0.75rem; color:var(--text-muted);">Confidence: ${(ts.confidence * 100).toFixed(0)}% | Similar to: <strong>${escapeHtml(ts.similar_package || 'N/A')}</strong></div>
+          </div>`;
+      }
+
       const signals = dep.trust.signals || {};
       const relSig = signals.release_signals || {};
 
       document.getElementById('drawer-content').innerHTML = `
         <div style="background:var(--bg-subtle); padding:1rem; border-radius:6px;">
-          <div><strong>Import Specifier:</strong> <code>${dep.extracted.name}</code></div>
-          <div><strong>Resolved Package:</strong> <code>${dep.identity.resolved_package}</code></div>
-          <div><strong>Ecosystem:</strong> ${dep.identity.ecosystem}</div>
-          <div><strong>Verdict:</strong> <span class="badge ${dep.decision.action === 'ALLOW' ? 'badge-allow' : 'badge-block'}">${dep.decision.action}</span></div>
+          <div><strong>Import Specifier:</strong> <code>${escapeHtml(dep.extracted.name)}</code></div>
+          <div><strong>Resolved Package:</strong> <code>${escapeHtml(dep.identity.resolved_package)}</code></div>
+          <div><strong>Ecosystem:</strong> ${escapeHtml(dep.identity.ecosystem)}</div>
+          <div><strong>Verdict:</strong> <span class="badge ${dep.decision.action === 'ALLOW' ? 'badge-allow' : 'badge-block'}">${escapeHtml(dep.decision.action)}</span></div>
         </div>
 
+        ${homoglyphPanel}
+
         <div>
-          <h4 style="font-size:0.9rem; font-weight:600; margin-bottom:0.5rem;">Trust & Release Evidence</h4>
+          <h4 style="font-size:0.9rem; font-weight:600; margin-bottom:0.5rem;">Trust &amp; Release Evidence</h4>
           <div style="background:#0b101c; padding:0.85rem; border-radius:6px; font-size:0.8rem; line-height:1.7;">
-            <div>• Identity Status: <strong>${signals.identity || 'N/A'}</strong></div>
-            <div>• Registry Releases: <strong>${signals.release_count || 0}</strong> (Latest: ${signals.latest_version || 'N/A'})</div>
-            <div>• Repository Linkage: <strong>${signals.repository || 'UNLINKED'}</strong></div>
-            <div>• Provenance Attestation: <strong>${signals.provenance || 'UNAVAILABLE'}</strong></div>
-            <div>• OSV Advisories: <strong>${signals.advisory || 'NONE'}</strong></div>
+            <div>• Identity Status: <strong>${escapeHtml(signals.identity || 'N/A')}</strong></div>
+            <div>• Registry Releases: <strong>${signals.release_count || 0}</strong> (Latest: ${escapeHtml(signals.latest_version || 'N/A')})</div>
+            <div>• Repository Linkage: <strong>${escapeHtml(signals.repository || 'UNLINKED')}</strong></div>
+            <div>• Provenance Attestation: <strong>${escapeHtml(signals.provenance || 'UNAVAILABLE')}</strong></div>
+            <div>• OSV Advisories: <strong>${escapeHtml(signals.advisory || 'NONE')}</strong></div>
           </div>
         </div>
 
         <div>
           <h4 style="font-size:0.9rem; font-weight:600; margin-bottom:0.5rem;">Policy Reasons</h4>
           <ul style="padding-left:1.2rem; font-size:0.8rem; color:var(--text-muted);">
-            ${dep.decision.reasons.map(r => `<li>${r}</li>`).join('')}
+            ${dep.decision.reasons.map(r => `<li>${escapeHtml(r)}</li>`).join('')}
           </ul>
         </div>
 
         ${dep.decision.suggested_fix ? `
           <div style="background:rgba(6, 182, 212, 0.1); border:1px solid rgba(6, 182, 212, 0.3); padding:0.85rem; border-radius:6px; font-size:0.8rem;">
-            <strong style="color:var(--accent-cyan)">Suggested Fix:</strong> ${dep.decision.suggested_fix}
+            <strong style="color:var(--accent-cyan)">Suggested Fix:</strong> ${escapeHtml(dep.decision.suggested_fix)}
           </div>
         ` : ''}
       `;
@@ -1072,49 +1350,537 @@ response = requets.get("https://api.github.com")</textarea>
       }
     }
 
-    // Load Graph for package
+    // Global Evidence Graph State
+    window._activeGraphData = null;
+    window._activeGraphPkg = 'requests';
+    window._selectedGraphNodeType = null;
+
+    // Load Graph for package from real backend endpoint
     async function loadGraphForPackage() {
-      const pkg = document.getElementById('graph-pkg-input').value.trim();
+      const inputEl = document.getElementById('graph-pkg-input');
+      const pkg = (inputEl && inputEl.value.trim()) || 'requests';
       const container = document.getElementById('graph-svg-container');
+
       container.innerHTML = `
-        <svg width="600" height="280" viewBox="0 0 600 280">
-          <defs>
-            <linearGradient id="gradNode" x1="0%" y1="0%" x2="100%" y2="100%">
-              <stop offset="0%" stop-color="#06b6d4" />
-              <stop offset="100%" stop-color="#3b82f6" />
-            </linearGradient>
-          </defs>
-          <line x1="80" y1="140" x2="200" y2="140" stroke="#334155" stroke-width="2" />
-          <line x1="200" y1="140" x2="340" y2="70" stroke="#334155" stroke-width="2" />
-          <line x1="200" y1="140" x2="340" y2="210" stroke="#334155" stroke-width="2" />
-          <line x1="340" y1="70" x2="480" y2="70" stroke="#334155" stroke-width="2" />
-          <line x1="340" y1="210" x2="480" y2="210" stroke="#334155" stroke-width="2" />
+        <div style="display:flex; flex-direction:column; align-items:center; gap:0.75rem; color:var(--text-muted); font-size:0.85rem;">
+          <div style="width:28px; height:28px; border:3px solid rgba(6,182,212,0.2); border-top-color:var(--accent-cyan); border-radius:50%; animation: spin 0.8s linear infinite;"></div>
+          <span>Resolving evidence graph for <strong>${escapeHtml(pkg)}</strong>...</span>
+        </div>
+      `;
 
-          <!-- Node: Import -->
-          <circle cx="80" cy="140" r="28" fill="#1e293b" stroke="#06b6d4" stroke-width="2"/>
-          <text x="80" y="144" fill="#f8fafc" font-size="10" font-weight="600" text-anchor="middle">IMPORT</text>
+      try {
+        const resp = await fetch(`/api/v1/graph/pypi/${encodeURIComponent(pkg)}`);
+        if (!resp.ok) {
+          throw new Error(`Graph API returned HTTP ${resp.status}`);
+        }
+        const data = await resp.json();
+        window._activeGraphData = data;
+        window._activeGraphPkg = pkg;
 
-          <!-- Node: Package -->
-          <circle cx="200" cy="140" r="32" fill="#1e293b" stroke="#3b82f6" stroke-width="2"/>
-          <text x="200" y="144" fill="#f8fafc" font-size="11" font-weight="700" text-anchor="middle">${pkg}</text>
+        renderEvidenceGraphSvg(data, pkg);
 
-          <!-- Node: Release -->
-          <circle cx="340" cy="70" r="24" fill="#1e293b" stroke="#10b981" stroke-width="2"/>
-          <text x="340" y="74" fill="#f8fafc" font-size="9" text-anchor="middle">RELEASE</text>
+        // If a node was previously selected or active, refresh its panel content
+        if (window._selectedGraphNodeType) {
+          selectGraphNode(window._selectedGraphNodeType);
+        }
+      } catch (err) {
+        console.error("Evidence graph load failure:", err);
+        container.innerHTML = `
+          <div style="text-align:center; padding:1.5rem; color:#f87171; font-size:0.85rem;">
+            Failed to load evidence graph for <code>${escapeHtml(pkg)}</code>: ${escapeHtml(err.message)}
+          </div>
+        `;
+      }
+    }
 
-          <!-- Node: Repository -->
-          <circle cx="340" cy="210" r="24" fill="#1e293b" stroke="#6366f1" stroke-width="2"/>
-          <text x="340" y="214" fill="#f8fafc" font-size="9" text-anchor="middle">REPO</text>
+    // Render interactive SVG with visual status states
+    function renderEvidenceGraphSvg(data, pkg) {
+      const container = document.getElementById('graph-svg-container');
+      const hasRelease = data.releases && data.releases.length > 0;
+      const hasRepo = data.repository && data.repository.properties && data.repository.properties.url;
+      const hasProv = data.provenance && data.provenance.properties && data.provenance.properties.has_provenance;
+      const hasAdvisories = data.advisories && data.advisories.length > 0;
 
-          <!-- Node: Provenance -->
-          <circle cx="480" cy="70" r="24" fill="#1e293b" stroke="#06b6d4" stroke-width="2"/>
-          <text x="480" y="74" fill="#f8fafc" font-size="9" text-anchor="middle">PROV</text>
+      // Color coding based on real evidence presence
+      const relColor = hasRelease ? '#10b981' : '#ef4444';
+      const relStatusText = hasRelease ? (data.releases[0].properties?.version || 'FOUND') : 'NOT FOUND';
 
-          <!-- Node: Advisory -->
-          <circle cx="480" cy="210" r="24" fill="#1e293b" stroke="#f59e0b" stroke-width="2"/>
-          <text x="480" y="214" fill="#f8fafc" font-size="9" text-anchor="middle">OSV</text>
+      const repoColor = hasRepo ? '#6366f1' : '#64748b';
+      const repoStatusText = hasRepo ? 'LINKED' : 'UNLINKED';
+
+      const provColor = hasProv ? '#06b6d4' : '#64748b';
+      const provStatusText = hasProv ? 'VERIFIED' : 'UNVERIFIED';
+
+      const osvColor = hasAdvisories ? '#ef4444' : hasRelease ? '#10b981' : '#64748b';
+      const osvStatusText = hasAdvisories ? `${data.advisories.length} ALERT` : hasRelease ? 'CLEAN' : 'NONE';
+
+      const pkgDisplay = pkg.length > 12 ? (pkg.slice(0, 10) + '…') : pkg;
+
+      container.innerHTML = `
+        <svg width="680" height="280" viewBox="0 0 680 280" style="max-width: 100%; height: auto; user-select:none;">
+          <!-- Traceable relationship lines -->
+          <line x1="90" y1="140" x2="220" y2="140" stroke="#334155" stroke-width="2" />
+          <line x1="220" y1="140" x2="370" y2="70" stroke="#334155" stroke-width="2" />
+          <line x1="220" y1="140" x2="370" y2="210" stroke="#334155" stroke-width="2" />
+          <line x1="370" y1="70" x2="530" y2="70" stroke="#334155" stroke-width="2" />
+          <line x1="370" y1="210" x2="530" y2="210" stroke="#334155" stroke-width="2" />
+
+          <!-- Node: IMPORT -->
+          <g class="graph-node" id="gn-IMPORT" data-node="IMPORT" tabindex="0" role="button" aria-label="Evidence Node IMPORT" onclick="selectGraphNode('IMPORT')" onkeydown="if(event.key==='Enter'||event.key===' ')selectGraphNode('IMPORT')">
+            <circle cx="90" cy="140" r="30" fill="#0f172a" stroke="#06b6d4" stroke-width="2"/>
+            <text x="90" y="136" fill="#f8fafc" font-size="10" font-weight="700" text-anchor="middle">IMPORT</text>
+            <text x="90" y="150" fill="#94a3b8" font-size="8" text-anchor="middle">AST Specifier</text>
+          </g>
+
+          <!-- Node: PACKAGE -->
+          <g class="graph-node" id="gn-PACKAGE" data-node="PACKAGE" tabindex="0" role="button" aria-label="Evidence Node PACKAGE" onclick="selectGraphNode('PACKAGE')" onkeydown="if(event.key==='Enter'||event.key===' ')selectGraphNode('PACKAGE')">
+            <circle cx="220" cy="140" r="34" fill="#0f172a" stroke="#3b82f6" stroke-width="2.5"/>
+            <text x="220" y="136" fill="#f8fafc" font-size="11" font-weight="700" text-anchor="middle">PACKAGE</text>
+            <text x="220" y="150" fill="#93c5fd" font-size="8" font-weight="600" text-anchor="middle">${escapeHtml(pkgDisplay)}</text>
+          </g>
+
+          <!-- Node: RELEASE -->
+          <g class="graph-node" id="gn-RELEASE" data-node="RELEASE" tabindex="0" role="button" aria-label="Evidence Node RELEASE" onclick="selectGraphNode('RELEASE')" onkeydown="if(event.key==='Enter'||event.key===' ')selectGraphNode('RELEASE')">
+            <circle cx="370" cy="70" r="28" fill="#0f172a" stroke="${relColor}" stroke-width="2"/>
+            <text x="370" y="66" fill="#f8fafc" font-size="10" font-weight="700" text-anchor="middle">RELEASE</text>
+            <text x="370" y="80" fill="${relColor}" font-size="8" text-anchor="middle">${escapeHtml(relStatusText)}</text>
+          </g>
+
+          <!-- Node: REPO -->
+          <g class="graph-node" id="gn-REPO" data-node="REPO" tabindex="0" role="button" aria-label="Evidence Node REPO" onclick="selectGraphNode('REPO')" onkeydown="if(event.key==='Enter'||event.key===' ')selectGraphNode('REPO')">
+            <circle cx="370" cy="210" r="28" fill="#0f172a" stroke="${repoColor}" stroke-width="2"/>
+            <text x="370" y="206" fill="#f8fafc" font-size="10" font-weight="700" text-anchor="middle">REPO</text>
+            <text x="370" y="220" fill="${repoColor}" font-size="8" text-anchor="middle">${escapeHtml(repoStatusText)}</text>
+          </g>
+
+          <!-- Node: PROV -->
+          <g class="graph-node" id="gn-PROV" data-node="PROV" tabindex="0" role="button" aria-label="Evidence Node PROV" onclick="selectGraphNode('PROV')" onkeydown="if(event.key==='Enter'||event.key===' ')selectGraphNode('PROV')">
+            <circle cx="530" cy="70" r="28" fill="#0f172a" stroke="${provColor}" stroke-width="2"/>
+            <text x="530" y="66" fill="#f8fafc" font-size="10" font-weight="700" text-anchor="middle">PROV</text>
+            <text x="530" y="80" fill="${provColor}" font-size="8" text-anchor="middle">${escapeHtml(provStatusText)}</text>
+          </g>
+
+          <!-- Node: OSV -->
+          <g class="graph-node" id="gn-OSV" data-node="OSV" tabindex="0" role="button" aria-label="Evidence Node OSV" onclick="selectGraphNode('OSV')" onkeydown="if(event.key==='Enter'||event.key===' ')selectGraphNode('OSV')">
+            <circle cx="530" cy="210" r="28" fill="#0f172a" stroke="${osvColor}" stroke-width="2"/>
+            <text x="530" y="206" fill="#f8fafc" font-size="10" font-weight="700" text-anchor="middle">OSV</text>
+            <text x="530" y="220" fill="${osvColor}" font-size="8" text-anchor="middle">${escapeHtml(osvStatusText)}</text>
+          </g>
         </svg>
       `;
+
+      // NOTE: click/keydown already bound via inline onclick/onkeydown attributes on each <g> node.
+      // No redundant addEventListener needed here — one binding is sufficient.
+    }
+
+    // Node click handler: selects node, highlights SVG circle, and renders detail panel
+    function selectGraphNode(nodeType) {
+      const data = window._activeGraphData;
+      if (!data) return;
+      const pkg = window._activeGraphPkg || data.package;
+      window._selectedGraphNodeType = nodeType;
+
+      // Update active SVG highlight
+      document.querySelectorAll('.graph-node').forEach(el => el.classList.remove('node-active'));
+      const activeNodeEl = document.getElementById(`gn-${nodeType}`);
+      if (activeNodeEl) {
+        activeNodeEl.classList.add('node-active');
+      }
+
+      const panel = document.getElementById('graph-evidence-panel');
+      if (!panel) return;
+      panel.classList.add('open');
+      // Scroll evidence panel into view so user can see it opened
+      setTimeout(() => panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' }), 60);
+
+      const titleEl = document.getElementById('ev-node-title');
+      const typeBadgeEl = document.getElementById('ev-type-badge');
+      const statusBadgeEl = document.getElementById('ev-status-badge');
+      const emptyStateEl = document.getElementById('ev-empty-state');
+      const emptyReasonEl = document.getElementById('ev-empty-reason');
+      const contentBodyEl = document.getElementById('ev-content-body');
+      const gridEl = document.getElementById('ev-metadata-grid');
+      const extraEl = document.getElementById('ev-extra-content');
+      const rawJsonEl = document.getElementById('ev-raw-json');
+
+      emptyStateEl.style.display = 'none';
+      contentBodyEl.style.display = 'block';
+      extraEl.innerHTML = '';
+      gridEl.innerHTML = '';
+
+      let items = [];
+      let rawData = null;
+
+      if (nodeType === 'IMPORT') {
+        typeBadgeEl.textContent = 'IMPORT';
+        typeBadgeEl.className = 'badge badge-allow';
+        titleEl.textContent = data.import_node?.properties?.import_specifier || pkg;
+        statusBadgeEl.textContent = 'EXTRACTED';
+        statusBadgeEl.className = 'badge badge-allow';
+
+        const props = data.import_node?.properties || {};
+        items = [
+          { label: 'Original Import Specifier', value: props.import_specifier || pkg },
+          { label: 'Source / Language', value: props.language ? `${props.language} (AST Parser)` : 'python' },
+          { label: 'Extraction Source', value: props.source_type || 'SOURCE_CODE' },
+          { label: 'Location in Source', value: `${props.file_path || '<source>'}:${props.line_number || 1}` },
+          { label: 'Raw Statement', value: props.raw_statement || `import ${pkg}` },
+          { label: 'Observation Timestamp', value: props.timestamp || data.import_node?.created_at || 'N/A' }
+        ];
+        rawData = data.import_node || {};
+
+      } else if (nodeType === 'PACKAGE') {
+        typeBadgeEl.textContent = 'PACKAGE';
+        typeBadgeEl.className = 'badge badge-allow';
+        const props = data.package_node?.properties || {};
+        titleEl.textContent = props.canonical_name || pkg;
+        const identStatus = props.identity_status || 'RESOLVED';
+        statusBadgeEl.textContent = identStatus;
+        statusBadgeEl.className = identStatus === 'RESOLVED' || identStatus === 'ALIASED' ? 'badge-allow' : 'badge-hold';
+
+        items = [
+          { label: 'Canonical Package Name', value: props.canonical_name || pkg },
+          { label: 'Ecosystem', value: data.ecosystem || 'pypi' },
+          { label: 'Identity Resolution Result', value: identStatus },
+          { label: 'PEP 503 Normalized Name', value: props.normalized_name || 'N/A' },
+          { label: 'Resolution Confidence', value: props.confidence ? `${(props.confidence * 100).toFixed(0)}%` : '100%' },
+          { label: 'Standard Library Check', value: props.is_stdlib ? 'Yes (Standard Library)' : 'No (External Registry)' },
+          { label: 'Timestamp', value: data.package_node?.created_at || 'N/A' }
+        ];
+
+        if (props.evidence_notes && props.evidence_notes.length > 0) {
+          extraEl.innerHTML = `
+            <div style="background:var(--bg-subtle); padding:0.75rem; border-radius:6px; border:1px solid var(--border-color); font-size:0.8rem;">
+              <strong style="color:var(--accent-cyan)">Identity Evidence Notes:</strong>
+              <ul style="margin-top:0.25rem; padding-left:1.2rem; color:var(--text-muted);">
+                ${props.evidence_notes.map(n => `<li>${escapeHtml(n)}</li>`).join('')}
+              </ul>
+            </div>
+          `;
+        }
+        rawData = data.package_node || {};
+
+      } else if (nodeType === 'RELEASE') {
+        typeBadgeEl.textContent = 'RELEASE';
+        const releases = data.releases || [];
+
+        if (releases.length > 0) {
+          const rel = releases[0];
+          const rProps = rel.properties || {};
+          typeBadgeEl.className = 'badge badge-allow';
+          titleEl.textContent = rProps.version ? `${pkg}@${rProps.version}` : 'Observed Release';
+          statusBadgeEl.textContent = rProps.status || 'FOUND';
+          statusBadgeEl.className = 'badge badge-allow';
+
+          items = [
+            { label: 'Observed / Latest Release', value: rProps.version || 'N/A' },
+            { label: 'Release Date', value: rProps.latest_release_time ? new Date(rProps.latest_release_time).toUTCString() : 'N/A' },
+            { label: 'Total Release Count', value: rProps.release_count !== undefined ? String(rProps.release_count) : 'N/A' },
+            { label: 'First Release Date', value: rProps.first_release_time ? new Date(rProps.first_release_time).toUTCString() : 'N/A' },
+            { label: 'Registry HTTP Status', value: rProps.http_status ? `HTTP ${rProps.http_status}` : 'HTTP 200' },
+            { label: 'Registry Source', value: 'PyPI JSON API v1' },
+            { label: 'Timestamp', value: rel.created_at || rProps.latest_release_time || 'N/A' }
+          ];
+
+          if (rProps.all_versions && rProps.all_versions.length > 0) {
+            extraEl.innerHTML = `
+              <div style="background:var(--bg-subtle); padding:0.75rem; border-radius:6px; border:1px solid var(--border-color); font-size:0.8rem;">
+                <strong style="color:var(--status-allow)">Observed Version History (Sample):</strong>
+                <div style="margin-top:0.35rem; font-family:var(--font-mono); color:var(--text-muted); word-break:break-all;">
+                  ${rProps.all_versions.map(v => `<span style="display:inline-block; margin-right:0.5rem; background:#1e293b; padding:0.15rem 0.45rem; border-radius:4px; margin-bottom:0.25rem;">${escapeHtml(v)}</span>`).join('')}
+                </div>
+              </div>
+            `;
+          }
+          rawData = data.releases;
+        } else {
+          typeBadgeEl.className = 'badge badge-block';
+          titleEl.textContent = `No Releases (${pkg})`;
+          statusBadgeEl.textContent = 'NOT_FOUND';
+          statusBadgeEl.className = 'badge badge-block';
+          emptyStateEl.style.display = 'block';
+          emptyReasonEl.textContent = `Registry lookup on PyPI returned HTTP 404. Package release does not exist.`;
+          contentBodyEl.style.display = 'none';
+          rawData = { releases: [], status: "NOT_FOUND" };
+        }
+
+      } else if (nodeType === 'REPO') {
+        typeBadgeEl.textContent = 'REPO';
+        const repo = data.repository;
+
+        if (repo && repo.properties && repo.properties.url) {
+          typeBadgeEl.className = 'badge badge-allow';
+          titleEl.textContent = repo.properties.url;
+          statusBadgeEl.textContent = 'VERIFIED LINK';
+          statusBadgeEl.className = 'badge badge-allow';
+
+          items = [
+            { label: 'Repository URL', value: repo.properties.url, isLink: true },
+            { label: 'Source / Author', value: repo.properties.author || 'N/A' },
+            { label: 'Homepage URL', value: repo.properties.homepage_url || 'N/A', isLink: Boolean(repo.properties.homepage_url) },
+            { label: 'Source Metadata', value: 'PyPI Project URLs Metadata' },
+            { label: 'Timestamp', value: repo.created_at || 'N/A' }
+          ];
+          rawData = repo;
+        } else {
+          typeBadgeEl.className = 'badge badge-hold';
+          titleEl.textContent = `No Repository Linked (${pkg})`;
+          statusBadgeEl.textContent = 'UNLINKED';
+          statusBadgeEl.className = 'badge badge-hold';
+          emptyStateEl.style.display = 'block';
+          emptyReasonEl.textContent = `No public source repository or VCS metadata was declared on the package registry.`;
+          contentBodyEl.style.display = 'none';
+          rawData = { repository: null };
+        }
+
+      } else if (nodeType === 'PROV') {
+        typeBadgeEl.textContent = 'PROV';
+        const prov = data.provenance;
+
+        if (prov && prov.properties && prov.properties.has_provenance) {
+          typeBadgeEl.className = 'badge badge-allow';
+          titleEl.textContent = `Provenance: ${prov.properties.build_system || 'Attested'}`;
+          statusBadgeEl.textContent = 'VERIFIED';
+          statusBadgeEl.className = 'badge badge-allow';
+
+          items = [
+            { label: 'Build System', value: prov.properties.build_system || 'GitHub Actions' },
+            { label: 'Source Repository', value: prov.properties.source_repository || 'N/A', isLink: Boolean(prov.properties.source_repository) },
+            { label: 'Publisher Identity', value: prov.properties.publisher_identity || 'N/A' },
+            { label: 'Transparency Log', value: prov.properties.transparency_log_verified ? 'Verified (Rekor/Sigstore)' : 'Not Verified' },
+            { label: 'Attestation URL', value: prov.properties.attestation_url || 'N/A', isLink: Boolean(prov.properties.attestation_url) },
+            { label: 'Evidence Source', value: 'SLSA / Sigstore / GitHub Actions OIDC' },
+            { label: 'Timestamp', value: prov.created_at || 'N/A' }
+          ];
+
+          if (prov.properties.evidence_notes && prov.properties.evidence_notes.length > 0) {
+            extraEl.innerHTML = `
+              <div style="background:var(--bg-subtle); padding:0.75rem; border-radius:6px; border:1px solid var(--border-color); font-size:0.8rem;">
+                <strong style="color:var(--accent-cyan)">Provenance Evidence Notes:</strong>
+                <ul style="margin-top:0.25rem; padding-left:1.2rem; color:var(--text-muted);">
+                  ${prov.properties.evidence_notes.map(n => `<li>${escapeHtml(n)}</li>`).join('')}
+                </ul>
+              </div>
+            `;
+          }
+          rawData = prov;
+        } else {
+          typeBadgeEl.className = 'badge badge-hold';
+          titleEl.textContent = `No Provenance Signal (${pkg})`;
+          statusBadgeEl.textContent = 'UNVERIFIED';
+          statusBadgeEl.className = 'badge badge-hold';
+          emptyStateEl.style.display = 'block';
+          emptyReasonEl.textContent = prov?.properties?.evidence_notes?.[0] || `No cryptographic provenance attestation or build workflow attestation found for this package.`;
+          contentBodyEl.style.display = 'none';
+          rawData = prov || { has_provenance: false };
+        }
+
+      } else if (nodeType === 'OSV') {
+        typeBadgeEl.textContent = 'OSV';
+        const advs = data.advisories || [];
+        const hasRelease = data.releases && data.releases.length > 0;
+
+        if (advs.length > 0) {
+          typeBadgeEl.className = 'badge badge-block';
+          titleEl.textContent = `${advs.length} Security Advisory(ies) Detected`;
+          statusBadgeEl.textContent = 'VULNERABILITY DETECTED';
+          statusBadgeEl.className = 'badge badge-block';
+
+          items = [
+            { label: 'Total Known Advisories', value: String(advs.length) },
+            { label: 'Database Source', value: 'OSV (Open Source Vulnerabilities API)' }
+          ];
+
+          extraEl.innerHTML = `
+            <div style="display:flex; flex-direction:column; gap:0.75rem;">
+              ${advs.map(adv => {
+                const p = adv.properties || {};
+                const sevColor = p.severity === 'CRITICAL' ? '#ef4444' : p.severity === 'HIGH' ? '#f97316' : '#f59e0b';
+                return `
+                  <div style="background:#0f172a; border:1px solid var(--border-color); border-left:4px solid ${sevColor}; padding:0.75rem; border-radius:4px;">
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.35rem;">
+                      <strong style="color:#f8fafc; font-size:0.85rem;">${escapeHtml(p.advisory_id || adv.id)}</strong>
+                      <span class="badge" style="background:rgba(239,68,68,0.15); color:${sevColor};">${escapeHtml(p.severity || 'MODERATE')}</span>
+                    </div>
+                    <div style="font-size:0.8rem; color:var(--text-muted); margin-bottom:0.35rem;">${escapeHtml(p.summary || 'Security advisory recorded in OSV database.')}</div>
+                    <div style="font-size:0.75rem; color:var(--text-dim);">
+                      Affected: <code>${escapeHtml(Array.isArray(p.affected_versions) ? p.affected_versions.join(', ') : (p.affected_versions || 'All versions'))}</code>
+                      ${p.fixed_versions ? `| Fixed in: <code style="color:var(--status-allow)">${escapeHtml(Array.isArray(p.fixed_versions) ? p.fixed_versions.join(', ') : p.fixed_versions)}</code>` : ''}
+                    </div>
+                    ${p.references && p.references.length ? `
+                      <div style="font-size:0.75rem; margin-top:0.35rem;">
+                        <a href="${escapeHtml(p.references[0])}" target="_blank" rel="noopener noreferrer" style="color:var(--accent-cyan); text-decoration:underline;">Advisory Link / Reference ↗</a>
+                      </div>
+                    ` : ''}
+                  </div>
+                `;
+              }).join('')}
+            </div>
+          `;
+          rawData = advs;
+        } else if (hasRelease) {
+          typeBadgeEl.className = 'badge badge-allow';
+          titleEl.textContent = `0 Known Advisories (${pkg})`;
+          statusBadgeEl.textContent = 'NO ADVISORIES';
+          statusBadgeEl.className = 'badge badge-allow';
+
+          items = [
+            { label: 'Total Known Advisories', value: '0' },
+            { label: 'Vulnerability State', value: 'Clean (No known CVEs/GHSA records found in OSV database)' },
+            { label: 'Database Source', value: 'OSV (Open Source Vulnerabilities API)' },
+            { label: 'Verification Timestamp', value: new Date().toUTCString() }
+          ];
+          rawData = [];
+        } else {
+          typeBadgeEl.className = 'badge badge-hold';
+          titleEl.textContent = `No OSV Advisory Data (${pkg})`;
+          statusBadgeEl.textContent = 'N/A';
+          statusBadgeEl.className = 'badge badge-hold';
+          emptyStateEl.style.display = 'block';
+          emptyReasonEl.textContent = `Package not found on PyPI registry; cannot resolve OSV vulnerabilities.`;
+          contentBodyEl.style.display = 'none';
+          rawData = [];
+        }
+      }
+
+      // Render grid items safely
+      items.forEach(it => {
+        const div = document.createElement('div');
+        div.className = 'evidence-item';
+        const labelDiv = document.createElement('div');
+        labelDiv.className = 'evidence-item-label';
+        labelDiv.textContent = it.label;
+        const valDiv = document.createElement('div');
+        valDiv.className = 'evidence-item-value';
+
+        if (it.isLink && it.value && it.value !== 'N/A') {
+          const a = document.createElement('a');
+          a.href = it.value;
+          a.target = '_blank';
+          a.rel = 'noopener noreferrer';
+          a.style.color = 'var(--accent-cyan)';
+          a.style.textDecoration = 'underline';
+          a.textContent = it.value;
+          valDiv.appendChild(a);
+        } else {
+          valDiv.textContent = it.value;
+        }
+
+        div.appendChild(labelDiv);
+        div.appendChild(valDiv);
+        gridEl.appendChild(div);
+      });
+
+      // Render Raw JSON safely
+      rawJsonEl.textContent = JSON.stringify(rawData, null, 2);
+    }
+
+    // Close Evidence Detail Panel
+    function closeGraphEvidencePanel() {
+      const panel = document.getElementById('graph-evidence-panel');
+      if (panel) {
+        panel.classList.remove('open');
+      }
+      document.querySelectorAll('.graph-node').forEach(el => el.classList.remove('node-active'));
+      window._selectedGraphNodeType = null;
+    }
+
+    // Load evaluated dependencies from last scan result into the Dependencies catalog table
+    function loadDependenciesMaster() {
+      const tbody = document.getElementById('deps-master-body');
+      if (!tbody) return;
+      if (!lastScanResult || !lastScanResult.dependencies || lastScanResult.dependencies.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="7" style="text-align:center; color:var(--text-dim); padding:2rem;">No scan results yet. Run a scan in the Scan Engine tab first.</td></tr>`;
+        return;
+      }
+      tbody.innerHTML = '';
+      lastScanResult.dependencies.forEach((dep, idx) => {
+        const v = dep.decision.action;
+        const badgeClass = v === 'ALLOW' ? 'badge-allow' : v === 'HOLD' ? 'badge-hold' : v === 'BLOCK' ? 'badge-block' : 'badge-alert';
+        const identStatus = dep.identity.status || 'N/A';
+        const regStatus = dep.registry ? dep.registry.status : (dep.identity.is_stdlib ? 'STDLIB' : 'N/A');
+        const risk = dep.decision.risk_level;
+        const riskColor = risk === 'HIGH' ? '#f87171' : risk === 'MEDIUM' ? '#fbbf24' : '#34d399';
+        const row = document.createElement('tr');
+        row.setAttribute('data-dep-name', (dep.identity.resolved_package || dep.extracted.name).toLowerCase());
+        row.setAttribute('data-dep-status', v.toLowerCase());
+        row.innerHTML = `
+          <td><strong><code>${escapeHtml(dep.identity.resolved_package)}</code></strong><br><span style="font-size:0.72rem; color:var(--text-dim);">import: ${escapeHtml(dep.extracted.name)}</span></td>
+          <td><span style="font-size:0.8rem; color:var(--text-muted);">${escapeHtml(dep.identity.ecosystem || 'pypi')}</span></td>
+          <td><span style="font-size:0.78rem; color:var(--text-muted);">${escapeHtml(identStatus)}</span></td>
+          <td><span style="font-size:0.78rem; color:var(--text-muted);">${escapeHtml(regStatus)}</span></td>
+          <td><span class="badge ${badgeClass}">${escapeHtml(v)}</span></td>
+          <td><span style="font-size:0.8rem; font-weight:600; color:${riskColor};">${escapeHtml(risk)}</span></td>
+          <td><button class="btn btn-secondary" style="padding:0.25rem 0.6rem; font-size:0.75rem;" onclick="openDependencyDrawer(${idx})">Inspect</button></td>
+        `;
+        tbody.appendChild(row);
+      });
+    }
+
+    // Filter the Dependencies catalog table by search term (name or status)
+    function filterDepTable() {
+      const searchInput = document.getElementById('dep-search-input');
+      if (!searchInput) return;
+      const term = searchInput.value.toLowerCase().trim();
+      const rows = document.querySelectorAll('#deps-master-body tr');
+      rows.forEach(row => {
+        if (!row.hasAttribute('data-dep-name')) {
+          // Header/empty rows always visible
+          row.style.display = '';
+          return;
+        }
+        const name = row.getAttribute('data-dep-name') || '';
+        const status = row.getAttribute('data-dep-status') || '';
+        if (!term || name.includes(term) || status.includes(term)) {
+          row.style.display = '';
+        } else {
+          row.style.display = 'none';
+        }
+      });
+    }
+
+    // Update policy rules display when profile dropdown changes
+    function updatePolicyProfileRules() {
+      const select = document.getElementById('policy-profile-select');
+      const display = document.getElementById('policy-rules-display');
+      if (!select || !display) return;
+      const profile = select.value;
+
+      const profiles = {
+        STRICT_CI: [
+          { rule: 'missing_package', action: 'BLOCK', color: '#ef4444' },
+          { rule: 'unresolved_identity', action: 'BLOCK', color: '#ef4444' },
+          { rule: 'critical_advisory', action: 'BLOCK', color: '#ef4444' },
+          { rule: 'moderate_advisory', action: 'HOLD', color: '#f59e0b' },
+          { rule: 'phantom_appeared', action: 'ALERT', color: '#ec4899' },
+          { rule: 'weak_provenance', action: 'HOLD', color: '#f59e0b' },
+          { rule: 'max_quarantine_age', action: '14 days', color: '#06b6d4' },
+        ],
+        ENTERPRISE: [
+          { rule: 'missing_package', action: 'BLOCK', color: '#ef4444' },
+          { rule: 'unresolved_identity', action: 'BLOCK', color: '#ef4444' },
+          { rule: 'critical_advisory', action: 'BLOCK', color: '#ef4444' },
+          { rule: 'moderate_advisory', action: 'BLOCK', color: '#ef4444' },
+          { rule: 'phantom_appeared', action: 'ALERT', color: '#ec4899' },
+          { rule: 'weak_provenance', action: 'BLOCK', color: '#ef4444' },
+          { rule: 'provenance_mandatory', action: 'BLOCK', color: '#ef4444' },
+          { rule: 'max_quarantine_age', action: '30 days', color: '#06b6d4' },
+        ],
+        DEVELOPMENT: [
+          { rule: 'missing_package', action: 'HOLD', color: '#f59e0b' },
+          { rule: 'unresolved_identity', action: 'HOLD', color: '#f59e0b' },
+          { rule: 'critical_advisory', action: 'BLOCK', color: '#ef4444' },
+          { rule: 'moderate_advisory', action: 'ALLOW', color: '#10b981' },
+          { rule: 'phantom_appeared', action: 'ALERT', color: '#ec4899' },
+          { rule: 'weak_provenance', action: 'ALLOW', color: '#10b981' },
+          { rule: 'max_quarantine_age', action: '7 days', color: '#06b6d4' },
+        ],
+      };
+
+      const rules = profiles[profile] || profiles['STRICT_CI'];
+      display.innerHTML = rules.map(r =>
+        `<div>${escapeHtml(r.rule)}: <span style="color:${r.color}">${escapeHtml(r.action)}</span></div>`
+      ).join('');
     }
 
     // Repair proposals
@@ -1309,7 +2075,61 @@ response = requets.get("https://api.github.com")</textarea>
 
     // Initialize Dashboard
     window.addEventListener('DOMContentLoaded', () => {
-      runLiveScan();
+      // Setup manual edit listener on source editor: automatically changes scenario to CUSTOM INPUT
+      const codeArea = document.getElementById('scan-code-input');
+      if (codeArea) {
+        codeArea.addEventListener('input', () => {
+          setScenario('CUSTOM INPUT');
+          try {
+            localStorage.setItem('slopguard_scan_code', codeArea.value);
+            localStorage.setItem('slopguard_scan_scenario', 'CUSTOM INPUT');
+          } catch (e) {}
+        });
+      }
+
+      // Check if we have deterministic persisted state in localStorage
+      let savedCode = null;
+      let savedScenario = null;
+      let savedLang = null;
+      let savedLastScan = null;
+      try {
+        savedCode = localStorage.getItem('slopguard_scan_code');
+        savedScenario = localStorage.getItem('slopguard_scan_scenario');
+        savedLang = localStorage.getItem('slopguard_scan_lang');
+        savedLastScan = localStorage.getItem('slopguard_last_scan');
+      } catch (e) {}
+
+      const langSelect = document.getElementById('scan-lang-select');
+      if (savedLang && langSelect) {
+        langSelect.value = savedLang;
+      }
+
+      if (savedCode && savedScenario) {
+        if (codeArea) codeArea.value = savedCode;
+        setScenario(savedScenario);
+        // Also sync the verdict stream badge to match the restored active scenario
+        const vBadge = document.getElementById('verdict-scenario-badge');
+        if (vBadge) {
+          vBadge.textContent = savedScenario;
+          vBadge.className = 'badge ' + getScenarioBadgeClass(savedScenario);
+          vBadge.style.display = 'inline-flex';
+        }
+      } else {
+        // Default to one clearly labeled deterministic sample (PHANTOM DEPENDENCY)
+        loadSampleCode('phantom');
+      }
+
+      if (savedLastScan) {
+        try {
+          const parsed = JSON.parse(savedLastScan);
+          renderScanResults(parsed);
+        } catch (e) {
+          runLiveScan();
+        }
+      } else {
+        runLiveScan();
+      }
+
       loadPhantomsTable();
     });
   </script>

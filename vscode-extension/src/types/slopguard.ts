@@ -39,6 +39,18 @@ export enum PhantomState {
     RESOLVED = 'RESOLVED'
 }
 
+export enum EngineConnectionStatus {
+    INITIALIZING = 'INITIALIZING',
+    STARTING = 'STARTING',
+    READY = 'READY',
+    RUNNING_REST = 'RUNNING_REST',
+    CLI_FALLBACK = 'CLI_FALLBACK',
+    OFFLINE = 'OFFLINE',
+    STOPPED = 'STOPPED',
+    ERROR = 'ERROR',
+    UNAVAILABLE = 'UNAVAILABLE'
+}
+
 export type Ecosystem = 'pypi' | 'npm' | 'unknown';
 
 export interface ExtractedDependency {
@@ -105,6 +117,60 @@ export interface TrustAssessment {
     typosquat_details?: TyposquatCandidate;
     signals: Record<string, any>;
     reasons: string[];
+}
+
+export interface PolicySimulationResult {
+    policy_profile: string;
+    policy_version: string;
+    package: string;
+    simulated_action: PolicyAction;
+    risk_level: string;
+    requires_human_review: boolean;
+    reasons: string[];
+    suggested_fix?: string;
+}
+
+export function extractSuggestedTarget(dep: EvaluatedDependency): { target: string; reason: string } | undefined {
+    if (dep.trust.typosquat_details?.similar_package) {
+        return {
+            target: dep.trust.typosquat_details.similar_package,
+            reason: dep.trust.typosquat_details.reason
+        };
+    }
+
+    const stdlibAlts: Record<string, string> = {
+        'pytz': 'zoneinfo',
+        'simplejson': 'json',
+        'mock': 'unittest.mock',
+        'pathlib2': 'pathlib',
+        'six': 'builtins'
+    };
+    const lowerName = dep.extracted.name.toLowerCase();
+    if (stdlibAlts[lowerName]) {
+        return {
+            target: stdlibAlts[lowerName],
+            reason: `Modern standard library replacement: '${stdlibAlts[lowerName]}'`
+        };
+    }
+
+    if (dep.decision.suggested_fix) {
+        const fix = dep.decision.suggested_fix;
+        const match = /['"`]([a-zA-Z0-9_\-\.]+)['"`]/.exec(fix);
+        if (match && match[1].toLowerCase() !== dep.extracted.name.toLowerCase()) {
+            return {
+                target: match[1],
+                reason: fix
+            };
+        }
+        if (!fix.includes(' ')) {
+            return {
+                target: fix,
+                reason: 'Recommended canonical package alternative.'
+            };
+        }
+    }
+
+    return undefined;
 }
 
 export interface PolicyDecision {

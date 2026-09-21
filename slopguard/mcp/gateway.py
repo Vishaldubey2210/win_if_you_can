@@ -81,6 +81,56 @@ class MCPGateway:
                     "required": ["patched_code"],
                 },
             },
+            {
+                "name": "scan_code",
+                "description": "Scan full source code snippet or manifest (requirements.txt, package.json, python, js, ts) and evaluate all extracted dependencies through the security gate.",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "code": {"type": "string", "description": "Source code or manifest content"},
+                        "language": {
+                            "type": "string",
+                            "enum": ["python", "javascript", "typescript", "requirements", "pyproject", "package_json"],
+                            "default": "python",
+                        },
+                    },
+                    "required": ["code"],
+                },
+            },
+            {
+                "name": "gate_install",
+                "description": "Evaluate an installation permit for an AI agent before running pip install or npm install.",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "package_name": {"type": "string", "description": "Package to verify for installation"},
+                        "ecosystem": {"type": "string", "enum": ["pypi", "npm"], "default": "pypi"},
+                        "actor": {"type": "string", "default": "ai-agent"},
+                    },
+                    "required": ["package_name"],
+                },
+            },
+            {
+                "name": "list_phantoms",
+                "description": "List all hallucinated or phantom dependencies currently tracked in temporal memory.",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {},
+                },
+            },
+            {
+                "name": "simulate_policy",
+                "description": "Simulate policy verdict for a package under a specific policy profile (development, strict_ci, enterprise).",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "package_name": {"type": "string"},
+                        "ecosystem": {"type": "string", "enum": ["pypi", "npm"], "default": "pypi"},
+                        "profile": {"type": "string", "enum": ["development", "strict_ci", "enterprise"], "default": "strict_ci"},
+                    },
+                    "required": ["package_name"],
+                },
+            },
         ]
 
     async def execute_tool(self, name: str, arguments: Dict[str, Any]) -> Dict[str, Any]:
@@ -144,5 +194,60 @@ class MCPGateway:
                 "blocked_count": scan_res.summary.blocked_count,
                 "summary": scan_res.summary.model_dump(),
             }
+
+        elif name == "scan_code":
+            code = arguments["code"]
+            lang = arguments.get("language", "python")
+            scan_res = await self.scanner.scan_code(code, language=lang, file_path="<mcp_scan>")
+            return {
+                "allowed": scan_res.summary.blocked_count == 0,
+                "summary": scan_res.summary.model_dump(),
+                "dependencies": [
+                    {
+                        "name": dep.extracted.name,
+                        "resolved_package": dep.identity.resolved_package,
+                        "verdict": dep.decision.action.value,
+                        "risk_level": dep.decision.risk_level,
+                        "reasons": dep.decision.reasons,
+                        "suggested_fix": dep.decision.suggested_fix,
+                    }
+                    for dep in scan_res.dependencies
+                ],
+            }
+
+        elif name == "gate_install":
+            pkg = arguments["package_name"]
+            actor = arguments.get("actor", "ai-agent")
+            permit = await self.scanner.firewall.verify_and_gate_install(
+                package_name=pkg, ecosystem=ecosystem, actor=actor
+            )
+            return permit.model_dump(mode="json")
+
+        elif name == "list_phantoms":
+            phantoms = self.scanner.memory.list_phantoms()
+            return {
+                "count": len(phantoms),
+                "phantoms": [p.model_dump(mode="json") for p in phantoms],
+            }
+
+        elif name == "simulate_policy":
+            pkg = arguments["package_name"]
+            prof_str = arguments.get("profile", "strict_ci").upper()
+            from slopguard.policy.config import PolicyProfileName, get_profile_config
+            from slopguard.policy.engine import DeterministicPolicyEngine
+            prof_enum = PolicyProfileName[prof_str] if prof_str in PolicyProfileName.__members__ else PolicyProfileName.STRICT_CI
+            sim_engine = DeterministicPolicyEngine(config=get_profile_config(prof_enum))
+
+            dep = ExtractedDependency(name=pkg, ecosystem=ecosystem)
+            identity = self.scanner.identity_resolver.resolve(dep)
+            adapter = self.scanner.pypi_adapter if ecosystem == Ecosystem.PYPI else self.scanner.npm_adapter
+            registry = await adapter.verify_package(identity.resolved_package)
+            advs, _ = await self.scanner.osv_adapter.query_advisories(
+                package_name=identity.resolved_package, ecosystem=ecosystem, version=registry.latest_version
+            )
+            prov = self.scanner.provenance_extractor.extract(registry)
+            trust = self.scanner.trust_evaluator.evaluate(identity, registry, advs, prov)
+            phantom_rec = self.scanner.memory.get_record(identity.resolved_package, ecosystem)
+            return sim_engine.simulate(identity, trust, registry, phantom_rec)
 
         raise ValueError(f"Unknown MCP tool: {name}")

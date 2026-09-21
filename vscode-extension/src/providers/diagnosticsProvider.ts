@@ -25,9 +25,8 @@ export class DiagnosticsProvider {
         const documentText = document ? document.getText() : null;
 
         for (const dep of scanResult.dependencies) {
-            const isAlias = dep.identity.status === IdentityStatus.ALIASED;
-            // Only flag non-ALLOW dependencies or ALLOW with special alias notices
-            if (dep.decision.action === PolicyAction.ALLOW && !isAlias) {
+            // Only flag blocked, held, or alerted dependencies (ALLOW dependencies are verified clean)
+            if (dep.decision.action === PolicyAction.ALLOW) {
                 continue;
             }
 
@@ -76,25 +75,42 @@ export class DiagnosticsProvider {
 
     private formatDiagnosticMessage(dep: EvaluatedDependency): string {
         const importName = dep.extracted.name;
+        const registryStatus = dep.registry?.status || 'UNKNOWN';
+        const riskLevel = dep.decision.risk_level || 'HIGH';
+        const policyAction = dep.decision.action;
         const canonical = dep.identity.resolved_package;
         const isAlias = dep.identity.status === IdentityStatus.ALIASED;
-        const reasons = dep.decision.reasons.length > 0 ? dep.decision.reasons.join('; ') : 'Dependency failed policy check';
 
-        let header = `[SLOPGUARD ${dep.decision.action}] ${importName}`;
+        let msg = `SLOPGUARD:\nDependency "${importName}" could not be verified.`;
         if (isAlias) {
-            header += ` (resolves to canonical package: ${canonical})`;
+            msg = `SLOPGUARD:\nDependency "${importName}" resolves to canonical package: ${canonical}.`;
+        } else if (policyAction === PolicyAction.ALLOW) {
+            msg = `SLOPGUARD:\nDependency "${importName}" verified.`;
         }
 
-        let body = `\nReasons: ${reasons}`;
+        msg += `\nRegistry: ${registryStatus}`;
+        msg += `\nRisk: ${riskLevel}`;
+        msg += `\nPolicy: ${policyAction}`;
 
-        if (dep.decision.suggested_fix) {
-            body += `\n💡 Suggested Fix: ${dep.decision.suggested_fix}`;
-        } else if (dep.trust.typosquat_details) {
-            const td = dep.trust.typosquat_details;
-            body += `\n💡 Potential Typosquat: Similar to '${td.similar_package}' (${(td.confidence * 100).toFixed(0)}% confidence)`;
+        let suggestedFix = dep.decision.suggested_fix;
+        if (!suggestedFix && dep.trust?.typosquat_details?.similar_package) {
+            suggestedFix = dep.trust.typosquat_details.similar_package;
+        } else if (suggestedFix && suggestedFix.startsWith("Did you mean '") && suggestedFix.endsWith("'?")) {
+            const match = suggestedFix.match(/Did you mean '([^']+)'\?/);
+            if (match) {
+                suggestedFix = match[1];
+            }
         }
 
-        return `${header}${body}`;
+        if (suggestedFix) {
+            msg += `\nSuggested fix: ${suggestedFix}`;
+        }
+
+        if (dep.decision.reasons && dep.decision.reasons.length > 0) {
+            msg += `\nReasons: ${dep.decision.reasons.join('; ')}`;
+        }
+
+        return msg;
     }
 
     private findDependencyRange(dep: EvaluatedDependency, documentText: string | null): vscode.Range {

@@ -70,6 +70,17 @@ class EvidenceGraph(BaseModel):
     def get_package_node_id(self, package_name: str, ecosystem: Ecosystem) -> str:
         return f"pkg:{ecosystem.value}:{package_name.strip().lower()}"
 
+    def get_package_node(self, package_name: str, ecosystem: Ecosystem) -> Optional[GraphNode]:
+        pkg_id = self.get_package_node_id(package_name, ecosystem)
+        return self.nodes.get(pkg_id)
+
+    def get_package_imports(self, package_name: str, ecosystem: Ecosystem) -> List[GraphNode]:
+        pkg_id = self.get_package_node_id(package_name, ecosystem)
+        import_ids = {
+            e.source_id for e in self.edges if e.target_id == pkg_id and e.relation == EdgeRelation.RESOLVES_TO
+        }
+        return [self.nodes[n_id] for n_id in import_ids if n_id in self.nodes]
+
     def get_package_releases(self, package_name: str, ecosystem: Ecosystem) -> List[GraphNode]:
         pkg_id = self.get_package_node_id(package_name, ecosystem)
         release_node_ids = {
@@ -126,9 +137,14 @@ class EvidenceGraph(BaseModel):
                 type=NodeType.IMPORT,
                 label=raw_name,
                 properties={
-                    "file_path": dep.extracted.file_path,
-                    "line_number": dep.extracted.line_number,
+                    "import_specifier": raw_name,
+                    "file_path": dep.extracted.file_path or "<source>",
+                    "line_number": dep.extracted.line_number or 1,
                     "is_stdlib": dep.extracted.is_stdlib,
+                    "source_type": dep.extracted.source_type.value if hasattr(dep.extracted.source_type, 'value') else str(dep.extracted.source_type),
+                    "raw_statement": dep.extracted.raw_statement or f"import {raw_name}",
+                    "language": "python" if eco == Ecosystem.PYPI else "javascript",
+                    "timestamp": dep.timestamp.isoformat() if hasattr(dep, "timestamp") and dep.timestamp else datetime.now(timezone.utc).isoformat(),
                 },
             )
         )
@@ -141,10 +157,14 @@ class EvidenceGraph(BaseModel):
                 type=NodeType.PACKAGE,
                 label=pkg_name,
                 properties={
+                    "canonical_name": pkg_name,
                     "ecosystem": eco.value,
+                    "raw_specifier": raw_name,
+                    "normalized_name": dep.identity.normalized_name,
                     "identity_status": dep.identity.status.value,
                     "confidence": dep.identity.confidence,
                     "is_stdlib": dep.identity.is_stdlib,
+                    "evidence_notes": dep.identity.evidence_notes,
                 },
             )
         )
@@ -173,6 +193,10 @@ class EvidenceGraph(BaseModel):
                             "version": dep.registry.latest_version,
                             "release_count": dep.registry.release_count,
                             "latest_release_time": dep.registry.latest_release_time.isoformat() if dep.registry.latest_release_time else None,
+                            "first_release_time": dep.registry.first_release_time.isoformat() if dep.registry.first_release_time else None,
+                            "status": dep.registry.status.value,
+                            "http_status": dep.registry.http_status,
+                            "all_versions": dep.registry.all_versions[:10] if dep.registry.all_versions else [],
                         },
                     )
                 )
@@ -211,7 +235,13 @@ class EvidenceGraph(BaseModel):
                         id=repo_id,
                         type=NodeType.REPOSITORY,
                         label=dep.registry.repository_url,
-                        properties={"url": dep.registry.repository_url},
+                        properties={
+                            "url": dep.registry.repository_url,
+                            "has_repository": True,
+                            "author": dep.registry.author,
+                            "homepage_url": dep.registry.homepage_url,
+                            "source_repository": dep.registry.repository_url,
+                        },
                     )
                 )
                 self.add_edge(
@@ -232,10 +262,13 @@ class EvidenceGraph(BaseModel):
                         type=NodeType.ADVISORY,
                         label=adv.advisory_id,
                         properties={
+                            "advisory_id": adv.advisory_id,
                             "summary": adv.summary,
                             "severity": adv.severity,
                             "affected_versions": adv.affected_versions,
                             "fixed_versions": adv.fixed_versions,
+                            "references": adv.references,
+                            "source": "OSV (Open Source Vulnerabilities)",
                         },
                     )
                 )

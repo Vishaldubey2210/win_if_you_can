@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { EvaluatedDependency, PolicyAction, IdentityStatus, RegistryStatus } from '../types/slopguard';
+import { EvaluatedDependency, PolicyAction, IdentityStatus, RegistryStatus, extractSuggestedTarget } from '../types/slopguard';
 
 export class WebviewDetailProvider {
     public static currentPanel: WebviewDetailProvider | undefined;
@@ -127,31 +127,18 @@ export class WebviewDetailProvider {
             : '<li>Policy verification passed with no violations.</li>';
 
         // Repair proposals
+        const repairInfo = extractSuggestedTarget(dep);
         let repairsHtml = '';
-        if (dep.trust.typosquat_details) {
-            const td = dep.trust.typosquat_details;
+        if (repairInfo) {
             repairsHtml += `
                 <div class="repair-card">
                     <div class="repair-header">
-                        <strong>${this.escapeHtml(td.similar_package)}</strong>
-                        <span class="badge badge-confidence">${(td.confidence * 100).toFixed(0)}% Confidence</span>
+                        <strong>${this.escapeHtml(repairInfo.target)}</strong>
+                        <span class="badge badge-confidence">Recommended Alternative</span>
                     </div>
-                    <div class="repair-reason">${this.escapeHtml(td.reason)}</div>
+                    <div class="repair-reason">${this.escapeHtml(repairInfo.reason)}</div>
                     <div class="repair-actions">
-                        <button class="btn btn-primary" onclick="applyRepair('${this.escapeHtml(td.similar_package)}')">Apply &amp; Rescan</button>
-                    </div>
-                </div>
-            `;
-        } else if (dep.decision.suggested_fix && !dep.decision.suggested_fix.includes(' ')) {
-            repairsHtml += `
-                <div class="repair-card">
-                    <div class="repair-header">
-                        <strong>${this.escapeHtml(dep.decision.suggested_fix)}</strong>
-                        <span class="badge badge-confidence">Suggested Fix</span>
-                    </div>
-                    <div class="repair-reason">Recommended canonical alternative.</div>
-                    <div class="repair-actions">
-                        <button class="btn btn-primary" onclick="applyRepair('${this.escapeHtml(dep.decision.suggested_fix)}')">Apply &amp; Rescan</button>
+                        <button class="btn btn-primary" onclick="applyRepair('${this.escapeHtml(repairInfo.target)}')">Apply &amp; Rescan</button>
                     </div>
                 </div>
             `;
@@ -173,6 +160,7 @@ export class WebviewDetailProvider {
 <html lang="en">
 <head>
     <meta charset="UTF-8">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src ${this.panel.webview.cspSource} https: data:; style-src 'unsafe-inline'; script-src 'unsafe-inline';">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>SLOPGUARD Evidence Dossier</title>
     <style>

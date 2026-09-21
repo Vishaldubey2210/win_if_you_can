@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "slopguard": {
+      "command": "python",
+      "args": ["-m", "slopguard.mcp.server", "--transport", "stdio"]
+    }
+  }
+}

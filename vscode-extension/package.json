@@ -1,21 +1,26 @@
 {
-  "name": "slopguard",
+  "name": "slopguard-ai",
   "displayName": "SLOPGUARD — AI Dependency Firewall",
   "description": "Pre-install AI Dependency Control Plane & Supply-Chain Firewall for VS Code",
-  "version": "0.1.0",
+  "version": "0.1.2",
   "publisher": "vishaldubey2210",
   "license": "Apache-2.0",
   "repository": {
     "type": "git",
     "url": "https://github.com/Vishaldubey2210/win_if_you_can"
   },
+  "homepage": "https://github.com/Vishaldubey2210/win_if_you_can#readme",
+  "bugs": {
+    "url": "https://github.com/Vishaldubey2210/win_if_you_can/issues"
+  },
+  "icon": "media/icon.png",
   "engines": {
     "vscode": "^1.85.0"
   },
   "categories": [
-    "Security",
     "Linters",
-    "Programming Languages"
+    "Programming Languages",
+    "Other"
   ],
   "keywords": [
     "security",
@@ -30,6 +35,7 @@
   ],
   "main": "./out/extension.js",
   "activationEvents": [
+    "onStartupFinished",
     "onLanguage:python",
     "onLanguage:javascript",
     "onLanguage:typescript",
@@ -159,25 +165,123 @@
     "configuration": {
       "title": "SLOPGUARD",
       "properties": {
-        "slopguard.server.url": {
+        "slopguard.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Master switch to enable or disable SLOPGUARD AI Dependency Firewall."
+        },
+        "slopguard.cliPath": {
+          "type": "string",
+          "default": "slopguard",
+          "description": "Explicit path or command name for the slopguard executable (used if auto-discovery fails)."
+        },
+        "slopguard.serverUrl": {
           "type": "string",
           "default": "http://localhost:8000",
           "description": "Base URL of the SLOPGUARD REST API service."
         },
+        "slopguard.profile": {
+          "type": "string",
+          "enum": [
+            "DEVELOPMENT",
+            "STRICT_CI",
+            "ENTERPRISE"
+          ],
+          "default": "STRICT_CI",
+          "description": "Policy profile applied to dependency gate evaluations (DEVELOPMENT, STRICT_CI, ENTERPRISE)."
+        },
+        "slopguard.scanWorkspace": {
+          "type": "boolean",
+          "default": true,
+          "description": "Automatically scan dependencies across workspace files on opening."
+        },
+        "slopguard.server.url": {
+          "type": "string",
+          "default": "http://localhost:8000",
+          "description": "Legacy alias: Base URL of the SLOPGUARD REST API service."
+        },
         "slopguard.cli.path": {
           "type": "string",
           "default": "slopguard",
-          "description": "Path or command name for the slopguard executable for CLI fallback mode."
+          "description": "Legacy alias: Path or command name for the slopguard executable for CLI fallback mode."
+        },
+        "slopguard.engine.autoStart": {
+          "type": "boolean",
+          "default": true,
+          "description": "Automatically start the local SLOPGUARD engine daemon if not currently running."
+        },
+        "slopguard.engine.port": {
+          "type": "integer",
+          "default": 8000,
+          "description": "Port to run the local SLOPGUARD REST API daemon on."
+        },
+        "slopguard.engine.startupTimeoutSeconds": {
+          "type": "integer",
+          "default": 15,
+          "description": "Timeout in seconds to wait for the local engine health check on startup."
+        },
+        "slopguard.autoScan.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Master switch for continuous automatic dependency scanning."
+        },
+        "slopguard.autoScan.onStartup": {
+          "type": "boolean",
+          "default": true,
+          "description": "Automatically scan the workspace dependencies when VS Code opens."
+        },
+        "slopguard.autoScan.onSave": {
+          "type": "boolean",
+          "default": true,
+          "description": "Automatically scan supported source files and manifests when saved."
+        },
+        "slopguard.autoScan.watchManifests": {
+          "type": "boolean",
+          "default": true,
+          "description": "Watch requirements.txt, pyproject.toml, package.json, and lockfiles for external edits."
+        },
+        "slopguard.autoScan.watchNewFiles": {
+          "type": "boolean",
+          "default": true,
+          "description": "Automatically scan new Python/JS/TS source files when created in the workspace."
+        },
+        "slopguard.autoScan.periodic": {
+          "type": "boolean",
+          "default": true,
+          "description": "Run periodic background verification checks for active dependencies."
+        },
+        "slopguard.autoScan.intervalMinutes": {
+          "type": "integer",
+          "default": 30,
+          "description": "Interval in minutes between periodic background reverifications."
+        },
+        "slopguard.autoScan.excludePatterns": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [
+            "**/.git/**",
+            "**/node_modules/**",
+            "**/.venv/**",
+            "**/venv/**",
+            "**/dist/**",
+            "**/build/**",
+            "**/__pycache__/**",
+            "**/coverage/**",
+            "**/.pytest_cache/**"
+          ],
+          "description": "Glob patterns to exclude from automatic dependency scanning."
         },
         "slopguard.autoScan": {
           "type": "boolean",
           "default": true,
-          "description": "Automatically scan dependencies when opening a workspace or relevant source files."
+          "description": "Legacy toggle: Automatically scan dependencies when opening a workspace or relevant source files."
         },
         "slopguard.scanOnSave": {
           "type": "boolean",
           "default": true,
-          "description": "Automatically scan dependencies on saving .py, .js, .ts, or manifest files."
+          "description": "Legacy toggle: Automatically scan dependencies on saving .py, .js, .ts, or manifest files."
         },
         "slopguard.policyProfile": {
           "type": "string",

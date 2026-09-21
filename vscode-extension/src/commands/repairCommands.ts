@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
 import { ScanManager } from '../services/scanManager';
-import { EvaluatedDependency, PolicyAction } from '../types/slopguard';
+import { EvaluatedDependency, PolicyAction, extractSuggestedTarget } from '../types/slopguard';
 import { WebviewDetailProvider } from '../views/webviewDetailProvider';
 import { DependencyTreeItem } from '../providers/dependencyTreeProvider';
 
@@ -19,7 +19,7 @@ export function registerRepairCommands(
             } else {
                 // Find all scanned dependencies with repairs or typosquat candidates
                 const candidates = scanManager.getAllEvaluatedDependencies().filter(d => 
-                    d.trust.typosquat_details || (d.decision.suggested_fix && !d.decision.suggested_fix.includes(' '))
+                    extractSuggestedTarget(d) !== undefined
                 );
                 if (candidates.length === 0) {
                     vscode.window.showInformationMessage('No active dependencies have pending repair suggestions.');
@@ -28,12 +28,12 @@ export function registerRepairCommands(
 
                 const pick = await vscode.window.showQuickPick(
                     candidates.map(d => {
-                        const target = d.trust.typosquat_details?.similar_package || d.decision.suggested_fix!;
+                        const repairInfo = extractSuggestedTarget(d)!;
                         return {
-                            label: `Replace ${d.extracted.name} → ${target}`,
-                            description: `[${d.decision.action}] Confidence: ${(d.decision.confidence * 100).toFixed(0)}%`,
+                            label: `Replace ${d.extracted.name} → ${repairInfo.target}`,
+                            description: `[${d.decision.action}] Confidence: ${(d.decision.confidence * 100).toFixed(0)}% (${repairInfo.reason})`,
                             dep: d,
-                            target
+                            target: repairInfo.target
                         };
                     }),
                     { placeHolder: 'Select dependency to repair' }
@@ -45,8 +45,8 @@ export function registerRepairCommands(
             }
 
             if (dep) {
-                const target = dep.trust.typosquat_details?.similar_package || 
-                    (dep.decision.suggested_fix && !dep.decision.suggested_fix.includes(' ') ? dep.decision.suggested_fix : undefined);
+                const repairInfo = extractSuggestedTarget(dep);
+                const target = repairInfo?.target;
 
                 if (target) {
                     const choice = await vscode.window.showInformationMessage(
