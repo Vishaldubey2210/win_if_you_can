@@ -1,5 +1,5 @@
 {
-  "name": "slopguard-ai",
+  "name": "slopguard",
   "displayName": "SLOPGUARD — AI Dependency Firewall",
   "description": "Pre-install AI Dependency Control Plane & Supply-Chain Firewall for VS Code",
   "version": "0.1.2",
